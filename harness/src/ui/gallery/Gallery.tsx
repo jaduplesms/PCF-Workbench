@@ -334,12 +334,19 @@ export function Gallery() {
                 {thumb ? (
                   <img src={thumb} className={styles.thumbnailImg} alt={c.constructor} />
                 ) : (
-                  <div className={styles.thumbnailPlaceholder}>
-                    <div className={styles.placeholderIcon}>
-                      {c.controlType === 'virtual' ? '\u269B' : '\u2B1A'}
+                  <Tooltip
+                    content={c.hasBuild
+                      ? `Add a thumbnail.gif, .jpg, or .png to the control directory to show a preview here`
+                      : 'Run npm run build in the control project first'}
+                    relationship="description"
+                  >
+                    <div className={styles.thumbnailPlaceholder}>
+                      <div className={styles.placeholderIcon}>
+                        {c.controlType === 'virtual' ? '\u269B' : '\u2B1A'}
+                      </div>
+                      <span>{c.hasBuild ? 'No thumbnail yet' : 'Not built'}</span>
                     </div>
-                    <span>{c.hasBuild ? 'No thumbnail yet' : 'Not built'}</span>
-                  </div>
+                  </Tooltip>
                 )}
               </div>
 

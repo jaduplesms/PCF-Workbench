@@ -159,16 +159,10 @@ function buildDataSet(
     filtering: { getFilter: () => null, setFilter: () => {} },
     linking: {
       getLinkedEntities: () => {
-        // Build linked entity list from data store keys (excluding the dataset's own entity)
-        // In real Dynamics, these come from the view definition's linked entities
+        // Build linked entity list from all entity types in the data store.
+        // In real Dynamics, these come from the view definition's linked entities.
         const knownEntities: Array<{name: string; alias: string}> = [];
-        // Check which entity types exist in the data store
-        const commonLinked = [
-          'msdyn_workorder', 'account', 'contact', 'systemuser',
-          'ukf_nonproductiveevents', 'ukf_partcollection', 'ukf_lunch',
-          'msdyn_resourcerequirement', 'bookingstatus',
-        ];
-        for (const name of commonLinked) {
+        for (const name of getEntityStoreKeys()) {
           const data = getEntityData(name);
           if (data.length > 0) {
             knownEntities.push({ name, alias: name });

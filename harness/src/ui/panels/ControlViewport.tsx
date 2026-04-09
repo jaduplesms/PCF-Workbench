@@ -29,7 +29,7 @@ const useStyles = makeStyles({
   viewportWrapper: {
     flex: 1,
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
     backgroundColor: '#f0f0f0',
     overflow: 'auto',

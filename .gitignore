@@ -28,4 +28,15 @@ npm-debug.log*
 *.tmp
 debug_*.py
 debug_*.png
-generate_manual.py
+generate_*.py
+
+# Vite cache
+.vite/
+
+# Claude Code settings
+.claude/
+
+# Generated docs (not source)
+*.docx
+*.pptx
+screenshots/

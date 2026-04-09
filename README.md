@@ -179,18 +179,34 @@ npm install
 
 Browse all controls in a workspace directory:
 
+**Bash / Git Bash:**
 ```bash
 cd PCFBuilderFramework/harness
 PCF_WORKSPACE_ROOT="/path/to/your/pcf-controls" npx vite --port 8181
+```
+
+**PowerShell:**
+```powershell
+cd PCFBuilderFramework\harness
+$env:PCF_WORKSPACE_ROOT = "C:\path\to\your\pcf-controls"
+npx vite --port 8181
 ```
 
 ### Single Control Mode
 
 Open a specific control directly:
 
+**Bash / Git Bash:**
 ```bash
 cd PCFBuilderFramework/harness
 PCF_CONTROL_PATH="/path/to/MyControl/MyControl" npx vite --port 8181
+```
+
+**PowerShell:**
+```powershell
+cd PCFBuilderFramework\harness
+$env:PCF_CONTROL_PATH = "C:\path\to\MyControl\MyControl"
+npx vite --port 8181
 ```
 
 The harness opens at `http://localhost:8181`.
