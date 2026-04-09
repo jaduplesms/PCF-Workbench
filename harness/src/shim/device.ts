@@ -7,7 +7,7 @@ export function createDeviceShim(getState: () => HarnessStore) {
   return {
     captureAudio(): Promise<any> {
       log('captureAudio');
-      return Promise.reject(new Error('[pcf-harness] captureAudio not supported in harness'));
+      return Promise.reject(new Error('[pcf-workbench] captureAudio not supported in harness'));
     },
     captureImage(options?: any): Promise<any> {
       log('captureImage', options);
@@ -21,7 +21,7 @@ export function createDeviceShim(getState: () => HarnessStore) {
     },
     captureVideo(): Promise<any> {
       log('captureVideo');
-      return Promise.reject(new Error('[pcf-harness] captureVideo not supported in harness'));
+      return Promise.reject(new Error('[pcf-workbench] captureVideo not supported in harness'));
     },
     getBarcodeValue(): Promise<string> {
       log('getBarcodeValue');

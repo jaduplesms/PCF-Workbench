@@ -25,7 +25,7 @@ export function parseResx(xmlContent: string): Record<string, string> {
       }
     }
   } catch (err) {
-    console.warn('[pcf-harness] Failed to parse RESX:', err);
+    console.warn('[pcf-workbench] Failed to parse RESX:', err);
   }
 
   return result;

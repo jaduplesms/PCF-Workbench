@@ -104,7 +104,7 @@ export class ControlHost {
       this.onStateChange({ isLoaded: true, error: null });
     } catch (err: any) {
       const message = err.message || String(err);
-      console.error('[pcf-harness] Load error:', message);
+      console.error('[pcf-workbench] Load error:', message);
       this.onStateChange({ isLoaded: false, error: message });
     }
   }
@@ -210,14 +210,14 @@ export class ControlHost {
       } catch (err) {
         const destroyMs = performance.now() - destroyStart;
         this.getState().addLifecycleEvent({ method: 'destroy', durationMs: destroyMs, error: String(err) });
-        console.warn('[pcf-harness] Error in destroy():', err);
+        console.warn('[pcf-workbench] Error in destroy():', err);
       }
 
       // Check for resource leaks after destroy
       const leaks = this.resourceTracker.getLeaks();
       this.resourceTracker.uninstall();
       if (leaks.length > 0) {
-        console.warn(`[pcf-harness] ${leaks.length} resource leak(s) detected after destroy():`, leaks);
+        console.warn(`[pcf-workbench] ${leaks.length} resource leak(s) detected after destroy():`, leaks);
         this.getState().setResourceLeaks(leaks);
         this.getState().addLogEntry({
           category: 'lifecycle',

@@ -99,14 +99,14 @@ function loadControl(state: PcfPluginState): void {
 
   state.isGalleryMode = false;
 
-  console.log(`[pcf-harness] Loaded: ${state.manifest.namespace}.${state.manifest.constructor} v${state.manifest.version}`);
-  console.log(`[pcf-harness] Type: ${state.manifest.controlType}`);
-  console.log(`[pcf-harness] Bundle: ${state.outDir}/bundle.js`);
-  console.log(`[pcf-harness] Project root: ${state.projectRoot}`);
-  console.log(`[pcf-harness] Properties: ${state.manifest.properties.map(p => p.name).join(', ')}`);
-  console.log(`[pcf-harness] data.json: ${state.hasDataJson ? 'found' : 'not found'}`);
+  console.log(`[pcf-workbench] Loaded: ${state.manifest.namespace}.${state.manifest.constructor} v${state.manifest.version}`);
+  console.log(`[pcf-workbench] Type: ${state.manifest.controlType}`);
+  console.log(`[pcf-workbench] Bundle: ${state.outDir}/bundle.js`);
+  console.log(`[pcf-workbench] Project root: ${state.projectRoot}`);
+  console.log(`[pcf-workbench] Properties: ${state.manifest.properties.map(p => p.name).join(', ')}`);
+  console.log(`[pcf-workbench] data.json: ${state.hasDataJson ? 'found' : 'not found'}`);
   const resxCount = Object.keys(state.resxStrings).length;
-  if (resxCount > 0) console.log(`[pcf-harness] RESX: ${resxCount} strings`);
+  if (resxCount > 0) console.log(`[pcf-workbench] RESX: ${resxCount} strings`);
 }
 
 export function pcfPlugin(): Plugin {
@@ -134,7 +134,7 @@ export function pcfPlugin(): Plugin {
       if (!controlPath) {
         // Gallery mode — no specific control, show the catalog
         state.isGalleryMode = true;
-        console.log('[pcf-harness] Gallery mode — scanning workspace for controls');
+        console.log('[pcf-workbench] Gallery mode — scanning workspace for controls');
         return;
       }
       state.controlDir = path.resolve(controlPath);
@@ -204,7 +204,7 @@ export const controlDir = ${JSON.stringify(state.controlDir)};`;
             const { controlDir } = JSON.parse(body);
 
             if (!controlDir) {
-              console.log(`[pcf-harness] Switching to gallery mode`);
+              console.log(`[pcf-workbench] Switching to gallery mode`);
               state.controlDir = '';
               state.manifest = null;
               state.outDir = '';
@@ -213,7 +213,7 @@ export const controlDir = ${JSON.stringify(state.controlDir)};`;
               state.hasDataJson = false;
               state.isGalleryMode = true;
             } else {
-              console.log(`[pcf-harness] Switching to: ${controlDir}`);
+              console.log(`[pcf-workbench] Switching to: ${controlDir}`);
               state.controlDir = path.resolve(controlDir);
               loadControl(state);
             }
@@ -244,7 +244,7 @@ export const controlDir = ${JSON.stringify(state.controlDir)};`;
             if (filename === 'bundle.js' || filename === 'ControlManifest.xml') {
               if (debounceTimer) clearTimeout(debounceTimer);
               debounceTimer = setTimeout(() => {
-                console.log(`[pcf-harness] Bundle changed — sending reload signal`);
+                console.log(`[pcf-workbench] Bundle changed — sending reload signal`);
                 server.ws.send({
                   type: 'custom',
                   event: 'pcf-bundle-changed',
@@ -253,9 +253,9 @@ export const controlDir = ${JSON.stringify(state.controlDir)};`;
               }, 500);
             }
           });
-          console.log(`[pcf-harness] Watching for bundle changes: ${state.outDir}`);
+          console.log(`[pcf-workbench] Watching for bundle changes: ${state.outDir}`);
         } catch {
-          console.warn(`[pcf-harness] Could not watch bundle directory (hot reload disabled)`);
+          console.warn(`[pcf-workbench] Could not watch bundle directory (hot reload disabled)`);
         }
       }
 
@@ -504,7 +504,7 @@ export const controlDir = ${JSON.stringify(state.controlDir)};`;
             const ext = match[1] === 'gif' ? 'gif' : match[1] === 'png' ? 'png' : 'jpg';
             const thumbPath = path.join(controlDir, `thumbnail.${ext}`);
             fs.writeFileSync(thumbPath, imgBuffer);
-            console.log(`[pcf-harness] Thumbnail saved: ${thumbPath} (${(imgBuffer.length / 1024).toFixed(0)} KB)`);
+            console.log(`[pcf-workbench] Thumbnail saved: ${thumbPath} (${(imgBuffer.length / 1024).toFixed(0)} KB)`);
 
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ ok: true, path: thumbPath }));

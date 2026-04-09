@@ -31,7 +31,7 @@ export async function loadPlatformLibraries(resources: ManifestResources): Promi
 
     w[reactGlobal] = w.React;
     w[reactDomGlobal] = w.ReactDOM;
-    console.log(`[pcf-harness] React ${major} aliased: window.${reactGlobal}, window.${reactDomGlobal}`);
+    console.log(`[pcf-workbench] React ${major} aliased: window.${reactGlobal}, window.${reactDomGlobal}`);
   }
 
   // Set up Fluent UI stub
@@ -43,7 +43,7 @@ export async function loadPlatformLibraries(resources: ManifestResources): Promi
       : (minor <= 29 && patch <= 0) ? 'FluentUIReactv8290' : 'FluentUIReactv81211';
 
     if (!w[globalName]) {
-      console.log(`[pcf-harness] Fluent UI v${fluentLib.version} — stub as window.${globalName}`);
+      console.log(`[pcf-workbench] Fluent UI v${fluentLib.version} — stub as window.${globalName}`);
       w[globalName] = createFluentStub(w);
     }
   }

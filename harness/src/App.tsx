@@ -31,7 +31,7 @@ export function App() {
     // Load RESX localized strings
     if (resxStrings && Object.keys(resxStrings).length > 0) {
       setResxStrings(resxStrings);
-      console.log(`[pcf-harness] RESX: ${Object.keys(resxStrings).length} strings loaded`);
+      console.log(`[pcf-workbench] RESX: ${Object.keys(resxStrings).length} strings loaded`);
     }
 
     // Load data.json from the PCF project directory
@@ -43,9 +43,9 @@ export function App() {
           loadEntityData(data);
           const tableCount = Object.keys(data).length;
           const recordCount = Object.values(data as Record<string, any[]>).reduce((sum, arr) => sum + arr.length, 0);
-          console.log(`[pcf-harness] Loaded data.json: ${tableCount} tables, ${recordCount} records`);
+          console.log(`[pcf-workbench] Loaded data.json: ${tableCount} tables, ${recordCount} records`);
         } else {
-          console.log('[pcf-harness] No data.json found. WebAPI calls will return empty results.');
+          console.log('[pcf-workbench] No data.json found. WebAPI calls will return empty results.');
         }
         setReady(true);
       });

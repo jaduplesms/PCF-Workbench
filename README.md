@@ -1,4 +1,4 @@
-# PCF Builder Framework
+# PCF Workbench
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)](https://react.dev/)
@@ -11,11 +11,11 @@ An enhanced development harness and testing framework for Power Apps Component F
 
 ---
 
-## Why PCF Builder Framework?
+## Why PCF Workbench?
 
-The built-in `pcf-scripts start` test harness is minimal: a single control, no device emulation, no network simulation, and limited debugging tools. PCF Builder Framework replaces it with a full-featured development environment:
+The built-in `pcf-scripts start` test harness is minimal: a single control, no device emulation, no network simulation, and limited debugging tools. PCF Workbench replaces it with a full-featured development environment:
 
-| Feature | pcf-scripts start | PCF Builder Framework |
+| Feature | pcf-scripts start | PCF Workbench |
 |---|---|---|
 | Gallery of all controls | No | Yes |
 | Device emulation | No | 4 presets + responsive |

@@ -155,22 +155,12 @@ export function ControlInfoCard({ manifest }: Props) {
         </div>
       )}
 
-      {/* Property summary */}
+      {/* Property count summary */}
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>Properties</div>
-        {manifest.properties.map(p => (
-          <div key={p.name} className={styles.libItem}>
-            <span className={styles.value}>{p.name}</span>
-            <Badge appearance="outline" size="small">{p.ofType}</Badge>
-            <Badge
-              appearance={p.usage === 'bound' ? 'filled' : 'outline'}
-              size="small"
-              color={p.usage === 'bound' ? 'brand' : 'subtle'}
-            >
-              {p.usage}
-            </Badge>
-          </div>
-        ))}
+        <div className={styles.sectionTitle}>
+          Properties ({manifest.properties.length})
+          {manifest.dataSets.length > 0 && ` · ${manifest.dataSets.length} dataset${manifest.dataSets.length > 1 ? 's' : ''}`}
+        </div>
       </div>
     </div>
   );

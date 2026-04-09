@@ -14,7 +14,7 @@ export function setupRegistrationInterceptor(): void {
     registerControl(fqn: string, ctor: ControlConstructor) {
       capturedFqn = fqn;
       capturedConstructor = ctor;
-      console.log(`[pcf-harness] Registered control: ${fqn}`);
+      console.log(`[pcf-workbench] Registered control: ${fqn}`);
     },
   };
 }

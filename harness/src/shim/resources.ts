@@ -25,7 +25,7 @@ export async function preloadBundleResources(): Promise<void> {
 
     // Fetch all resources in parallel
     await Promise.all(files.map(file => fetchAndCache(file)));
-    console.log(`[pcf-harness] Preloaded ${Object.keys(resourceCache).length} resources`);
+    console.log(`[pcf-workbench] Preloaded ${Object.keys(resourceCache).length} resources`);
   } catch {
     // Non-fatal — resources will be fetched on demand
   }
@@ -68,23 +68,23 @@ export function createResourcesShim() {
       // Return from cache SYNCHRONOUSLY — the callback fires immediately
       // so setState happens during componentDidMount before any re-render
       if (resourceCache[id]) {
-        console.log(`[pcf-harness] getResource('${id}') CACHE HIT (${resourceCache[id].length} chars) — calling success synchronously`);
+        console.log(`[pcf-workbench] getResource('${id}') CACHE HIT (${resourceCache[id].length} chars) — calling success synchronously`);
         try {
           success(resourceCache[id]);
-          console.log(`[pcf-harness] getResource('${id}') success callback returned`);
+          console.log(`[pcf-workbench] getResource('${id}') success callback returned`);
         } catch (e) {
-          console.error(`[pcf-harness] getResource('${id}') success callback THREW:`, e);
+          console.error(`[pcf-workbench] getResource('${id}') success callback THREW:`, e);
         }
         return;
       }
-      console.warn(`[pcf-harness] getResource('${id}') CACHE MISS — fetching async`);
+      console.warn(`[pcf-workbench] getResource('${id}') CACHE MISS — fetching async`);
 
       // Fallback: fetch async (unlikely if preloadBundleResources ran)
       fetchAndCache(id).then(base64 => {
         if (base64) {
           success(base64);
         } else {
-          console.warn(`[pcf-harness] getResource('${id}') — not found`);
+          console.warn(`[pcf-workbench] getResource('${id}') — not found`);
           failure();
         }
       });

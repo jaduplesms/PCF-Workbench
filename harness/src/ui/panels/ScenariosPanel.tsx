@@ -10,11 +10,27 @@ import type { ManifestProperty, ManifestDataSet } from '../../types/manifest';
 
 const useStyles = makeStyles({
   root: {
-    padding: '12px',
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
+    overflow: 'hidden',
+  },
+  topSection: {
+    padding: '12px 12px 0',
+    display: 'flex',
+    flexDirection: 'column',
     gap: '8px',
+    flexShrink: 0,
+  },
+  scrollSection: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '0 12px',
+  },
+  bottomSection: {
+    padding: '8px 12px 12px',
+    flexShrink: 0,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   header: {
     fontSize: tokens.fontSizeBase300,
@@ -28,8 +44,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
-    flex: 1,
-    overflowY: 'auto',
   },
   scenarioItem: {
     display: 'flex',
@@ -67,7 +81,7 @@ interface TestScenario {
 }
 
 function storageKey(controlId: string): string {
-  return `pcf-harness-scenarios-${controlId}`;
+  return `pcf-workbench-scenarios-${controlId}`;
 }
 
 function loadScenariosFromStorage(controlId: string): TestScenario[] {
@@ -321,7 +335,7 @@ export function ScenariosPanel({ controlId }: ScenariosPanelProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'pcf-harness-scenarios.json';
+    a.download = 'pcf-workbench-scenarios.json';
     a.click();
     URL.revokeObjectURL(url);
   }, [scenarios]);
@@ -384,92 +398,93 @@ export function ScenariosPanel({ controlId }: ScenariosPanelProps) {
 
   return (
     <div className={styles.root}>
-      <div className={styles.header}>Test Scenarios</div>
-      <div className={styles.desc}>
-        Save and restore property values, page context, network mode, and device preset.
-      </div>
+      {/* Fixed top: header, save, generate */}
+      <div className={styles.topSection}>
+        <div className={styles.header}>Test Scenarios</div>
+        <div className={styles.desc}>
+          Save and restore property values, page context, network mode, and device preset.
+        </div>
 
-      {message && (
-        <MessageBar intent={message.intent}>
-          <MessageBarBody>{message.text}</MessageBarBody>
-        </MessageBar>
-      )}
-
-      {/* Save current state */}
-      <div className={styles.saveRow}>
-        <Input
-          size="small"
-          placeholder="Scenario name..."
-          value={newName}
-          onChange={(_, d) => setNewName(d.value)}
-          style={{ flex: 1 }}
-          onKeyDown={e => e.key === 'Enter' && handleSave()}
-        />
-        <Button
-          appearance="primary"
-          icon={<Save24Regular />}
-          size="small"
-          onClick={handleSave}
-        >
-          Save
-        </Button>
-      </div>
-
-      {manifest && (
-        <Button
-          appearance="outline"
-          icon={<Wand24Regular />}
-          size="small"
-          onClick={handleGenerate}
-          title="Auto-generate skeleton scenarios from manifest (device presets, network modes, edge cases)"
-        >
-          Generate Skeletons
-        </Button>
-      )}
-
-      <Divider />
-
-      {/* Scenario list */}
-      <div className={styles.scenarioList}>
-        {scenarios.length === 0 && (
-          <div className={styles.desc} style={{ textAlign: 'center', padding: 16 }}>
-            No saved scenarios yet. Configure properties above, then save here.
-          </div>
+        {message && (
+          <MessageBar intent={message.intent}>
+            <MessageBarBody>{message.text}</MessageBarBody>
+          </MessageBar>
         )}
-        {scenarios.map(s => (
-          <div key={s.name} className={styles.scenarioItem}>
-            <div style={{ flex: 1 }}>
-              <div className={styles.scenarioName}>{s.name}</div>
-              <div className={styles.scenarioMeta}>
-                {formatDate(s.savedAt)} &middot; {Object.keys(s.propertyValues).length} props
-                {s.pageEntityTypeName && ` \u00b7 ${s.pageEntityTypeName}`}
-                {s.networkMode !== 'online' && ` \u00b7 ${s.networkMode}`}
-              </div>
-            </div>
-            <Button
-              appearance="primary"
-              icon={<Open24Regular />}
-              size="small"
-              onClick={() => handleLoad(s)}
-              title="Load scenario"
-            >
-              Load
-            </Button>
-            <Button
-              appearance="subtle"
-              icon={<Delete24Regular />}
-              size="small"
-              onClick={() => handleDelete(s.name)}
-              title="Delete scenario"
-            />
-          </div>
-        ))}
+
+        <div className={styles.saveRow}>
+          <Input
+            size="small"
+            placeholder="Scenario name..."
+            value={newName}
+            onChange={(_, d) => setNewName(d.value)}
+            style={{ flex: 1 }}
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+          />
+          <Button
+            appearance="primary"
+            icon={<Save24Regular />}
+            size="small"
+            onClick={handleSave}
+          >
+            Save
+          </Button>
+        </div>
+
+        {manifest && (
+          <Button
+            appearance="outline"
+            icon={<Wand24Regular />}
+            size="small"
+            onClick={handleGenerate}
+            title="Auto-generate skeleton scenarios from manifest (device presets, network modes, edge cases)"
+          >
+            Generate Skeletons
+          </Button>
+        )}
       </div>
 
-      {/* Import/Export */}
+      {/* Scrollable scenario list */}
+      <div className={styles.scrollSection}>
+        <div className={styles.scenarioList}>
+          {scenarios.length === 0 && (
+            <div className={styles.desc} style={{ textAlign: 'center', padding: 16 }}>
+              No saved scenarios yet. Configure properties above, then save here.
+            </div>
+          )}
+          {scenarios.map(s => (
+            <div key={s.name} className={styles.scenarioItem}>
+              <div style={{ flex: 1 }}>
+                <div className={styles.scenarioName}>{s.name}</div>
+                <div className={styles.scenarioMeta}>
+                  {formatDate(s.savedAt)} &middot; {Object.keys(s.propertyValues).length} props
+                  {s.pageEntityTypeName && ` \u00b7 ${s.pageEntityTypeName}`}
+                  {s.networkMode !== 'online' && ` \u00b7 ${s.networkMode}`}
+                </div>
+              </div>
+              <Button
+                appearance="primary"
+                icon={<Open24Regular />}
+                size="small"
+                onClick={() => handleLoad(s)}
+                title="Load scenario"
+              >
+                Load
+              </Button>
+              <Button
+                appearance="subtle"
+                icon={<Delete24Regular />}
+                size="small"
+                onClick={() => handleDelete(s.name)}
+                title="Delete scenario"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fixed bottom: import/export */}
       {scenarios.length > 0 && (
-        <>
-          <Divider />
+        <div className={styles.bottomSection}>
           <div className={styles.saveRow}>
             <Button appearance="outline" size="small" onClick={handleExport} style={{ flex: 1 }}>
               Export All
@@ -478,7 +493,7 @@ export function ScenariosPanel({ controlId }: ScenariosPanelProps) {
               Import
             </Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

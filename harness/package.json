@@ -1,7 +1,7 @@
 {
-  "name": "pcf-harness",
-  "version": "0.1.0",
-  "description": "Enhanced PCF development harness with offline simulation, network conditioning, and performance monitoring",
+  "name": "pcf-workbench",
+  "version": "1.0.0",
+  "description": "PCF Workbench — a full-featured development environment for Power Apps Component Framework controls",
   "type": "module",
   "bin": {
     "pcf-harness": "./bin/pcf-harness.js"

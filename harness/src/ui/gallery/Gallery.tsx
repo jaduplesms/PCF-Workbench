@@ -267,7 +267,7 @@ export function Gallery() {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <div className={styles.headerTitle}>PCF Control Gallery</div>
+        <div className={styles.headerTitle}>PCF Workbench</div>
         <div className={styles.headerSubtitle}>
           {visibleControls.length} controls found in workspace{privateCount > 0 && !showPrivate ? ` (${privateCount} private hidden)` : ''}
         </div>

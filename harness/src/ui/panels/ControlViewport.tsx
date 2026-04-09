@@ -171,7 +171,7 @@ async function captureThumbnail(element: HTMLElement, controlDir: string): Promi
     URL.revokeObjectURL(url);
 
     const dataUrl = thumbCanvas.toDataURL('image/jpeg', 0.9);
-    console.log(`[pcf-harness] Capturing thumbnail for: ${controlDir} (${(dataUrl.length / 1024).toFixed(0)} KB)`);
+    console.log(`[pcf-workbench] Capturing thumbnail for: ${controlDir} (${(dataUrl.length / 1024).toFixed(0)} KB)`);
 
     const resp = await fetch('/api/save-thumbnail', {
       method: 'POST',
@@ -180,13 +180,13 @@ async function captureThumbnail(element: HTMLElement, controlDir: string): Promi
     });
     const result = await resp.json();
     if (result.ok) {
-      console.log(`[pcf-harness] Thumbnail saved: ${result.path}`);
+      console.log(`[pcf-workbench] Thumbnail saved: ${result.path}`);
     } else {
-      console.warn(`[pcf-harness] Thumbnail save failed:`, result.error);
+      console.warn(`[pcf-workbench] Thumbnail save failed:`, result.error);
     }
   } catch (err) {
-    console.warn('[pcf-harness] Thumbnail capture failed:', err);
-    console.warn('[pcf-harness] Tip: You can also take a manual screenshot and save it as thumbnail.jpg in the control directory');
+    console.warn('[pcf-workbench] Thumbnail capture failed:', err);
+    console.warn('[pcf-workbench] Tip: You can also take a manual screenshot and save it as thumbnail.jpg in the control directory');
   }
 }
 
@@ -281,7 +281,7 @@ export function ControlViewport({ manifest, bundlePath, cssFiles, controlDir }: 
   useEffect(() => {
     if (import.meta.hot) {
       import.meta.hot.on('pcf-bundle-changed', () => {
-        console.log('[pcf-harness] Bundle changed — reloading control');
+        console.log('[pcf-workbench] Bundle changed — reloading control');
         hostRef.current?.reload();
       });
     }
