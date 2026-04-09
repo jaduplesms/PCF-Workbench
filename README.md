@@ -168,9 +168,12 @@ Gallery cards display the total `out/` directory size for each built control, wi
 ### Install
 
 ```bash
+git clone https://github.com/jaduplesms/PCFBuilderFramework-.git
 cd PCFBuilderFramework/harness
 npm install
 ```
+
+> **No build step required.** Vite compiles TypeScript on-the-fly — just install and run.
 
 ### Gallery Mode
 
