@@ -1,4 +1,4 @@
-# PCF Dev Harness
+# PCF Workbench
 
 An enhanced development and testing environment for Power App Component Framework (PCF) controls, replacing the built-in `pcf-scripts start` harness with offline simulation, network conditioning, performance monitoring, and a control gallery.
 
