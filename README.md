@@ -21,7 +21,7 @@ The built-in `pcf-scripts start` test harness is minimal: a single control, no d
 | Device emulation | No | 4 presets + responsive |
 | Network conditioning | No | Offline, 3G, custom latency |
 | WebAPI mock with OData filters | No | Yes |
-| Performance monitoring | No | Render timeline, heap, DOM |
+| Performance monitoring | No | Render timeline, DOM, WebAPI log |
 | Resource leak detection | No | Event listeners, timers, observers |
 | Test scenarios | No | Save, load, export, import, auto-generate |
 | Dark mode toggle | No | Yes |
@@ -99,7 +99,6 @@ Real-time metrics tracked across the control lifecycle:
 
 - **Render timeline** -- Duration of each `updateView` call (last 50 renders)
 - **DOM node count** -- Elements inside the control container, updated per frame
-- **JS heap usage** -- Heap snapshots after each render (last 100)
 - **WebAPI call log** -- Method, entity type, duration, response size, record count, OData query (last 100 calls)
 
 ### Lifecycle Monitor
@@ -181,7 +180,7 @@ Browse all controls in a workspace directory:
 
 **Bash / Git Bash:**
 ```bash
-cd PCFBuilderFramework/harness
+cd PCF-Workbench/harness
 PCF_WORKSPACE_ROOT="/path/to/your/pcf-controls" npx vite --port 8181
 ```
 
@@ -198,7 +197,7 @@ Open a specific control directly:
 
 **Bash / Git Bash:**
 ```bash
-cd PCFBuilderFramework/harness
+cd PCF-Workbench/harness
 PCF_CONTROL_PATH="/path/to/MyControl/MyControl" npx vite --port 8181
 ```
 
@@ -218,7 +217,7 @@ The harness opens at `http://localhost:8181`.
 ## Project Structure
 
 ```
-PCFBuilderFramework/
+PCF-Workbench/
   harness/
     src/
       main.tsx                        # App entry point
@@ -364,7 +363,7 @@ This project is licensed under the [MIT License](LICENSE).
 ### Licensing Notes
 
 - **All harness code is original** — no Microsoft SDK source code is bundled or redistributed
-- **Dependencies** — React, Fluent UI, Vite, Zustand, fast-xml-parser, html2canvas, commander are all MIT licensed
+- **Dependencies** — React, Fluent UI, Vite, Zustand, fast-xml-parser, commander are all MIT licensed
 - **TypeScript** is Apache 2.0 licensed
 - **Fluent UI stubs** in the harness are original implementations that mimic the Fluent UI API surface for development/testing — they do not contain Microsoft Fluent UI source code
 - **PCF controls** loaded into the harness are the user's own work — the harness is a development tool only
