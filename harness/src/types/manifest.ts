@@ -8,6 +8,7 @@ export interface ManifestConfig {
   descriptionKey: string;
   properties: ManifestProperty[];
   dataSets: ManifestDataSet[];
+  typeGroups: Record<string, string[]>;
   featureUsage: FeatureUsage[];
   resources: ManifestResources;
 }
@@ -26,6 +27,13 @@ export interface ManifestProperty {
   usage: 'bound' | 'input' | 'output';
   required: boolean;
   defaultValue?: string;
+  enumValues?: EnumValue[];
+}
+
+export interface EnumValue {
+  name: string;
+  displayNameKey: string;
+  value: string;
 }
 
 export interface FeatureUsage {

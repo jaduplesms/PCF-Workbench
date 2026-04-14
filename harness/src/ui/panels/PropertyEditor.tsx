@@ -155,6 +155,17 @@ function resolveColumnValue(entityType: string, entityId: string, columnName: st
   return val ?? null;
 }
 
+/** Friendly label for PCF property types */
+function formatTypeName(ofType: string): string {
+  if (ofType.startsWith('SingleLine.')) return ofType.replace('SingleLine.', '');
+  if (ofType.startsWith('DateAndTime.')) return ofType.replace('DateAndTime.', '');
+  if (ofType === 'Whole.None') return 'Whole Number';
+  if (ofType === 'FP') return 'Floating Point';
+  if (ofType === 'Multiple') return 'Multi-Line Text';
+  if (ofType === 'Lookup.Simple') return 'Lookup';
+  return ofType;
+}
+
 function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, pageEntityId }: {
   prop: ManifestProperty;
   manifest: ManifestConfig;
@@ -165,6 +176,9 @@ function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, page
   const styles = useStyles();
   const value = useHarnessStore(s => s.propertyValues[prop.name]);
   const setValue = useHarnessStore(s => s.setPropertyValue);
+  const selectedType = useHarnessStore(s => s.propertyTypes[prop.name]);
+  const setPropertyType = useHarnessStore(s => s.setPropertyType);
+  const typeGroupTypes = prop.ofTypeGroup ? manifest.typeGroups[prop.ofTypeGroup] : undefined;
 
   // Track which column this property is bound to (stored as $columnName in the value)
   const boundColumn = typeof value === 'string' && value.startsWith('$') ? value.substring(1) : null;
@@ -246,6 +260,21 @@ function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, page
         case 'TwoOptions':
           return <Switch checked={value === true || value === 'true'} onChange={handleSwitchChange} />;
         case 'Enum':
+          if (prop.enumValues && prop.enumValues.length > 0) {
+            return (
+              <Dropdown
+                size="small"
+                placeholder="Select an option"
+                selectedOptions={staticVal ? [staticVal] : []}
+                value={prop.enumValues.find(v => v.value === staticVal)?.displayNameKey ?? staticVal}
+                onOptionSelect={(_, d) => setValue(prop.name, d.optionValue ?? null)}
+              >
+                {prop.enumValues.map(v => (
+                  <Option key={v.value} value={v.value} text={v.displayNameKey}>{v.displayNameKey}</Option>
+                ))}
+              </Dropdown>
+            );
+          }
           return (
             <Input size="small" value={staticVal} onChange={handleTextChange} placeholder={prop.descriptionKey || 'Static value'} />
           );
@@ -260,7 +289,7 @@ function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, page
       <div className={styles.field}>
         <div className={styles.label}>
           {prop.displayNameKey}
-          <span className={styles.typeHint}>({prop.ofType})</span>
+          <span className={styles.typeHint}>({selectedType ? formatTypeName(selectedType) : prop.ofType})</span>
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', fontSize: '12px', cursor: 'pointer' }}>
           <input
@@ -299,6 +328,21 @@ function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, page
           </>
         ) : (
           <>
+            {typeGroupTypes && typeGroupTypes.length > 0 && (
+              <>
+                <div className={styles.columnLabel}>Type</div>
+                <Dropdown
+                  size="small"
+                  selectedOptions={selectedType ? [selectedType] : []}
+                  value={selectedType ? formatTypeName(selectedType) : ''}
+                  onOptionSelect={(_, d) => { if (d.optionValue) setPropertyType(prop.name, d.optionValue); }}
+                >
+                  {typeGroupTypes.map(t => (
+                    <Option key={t} value={t} text={formatTypeName(t)}>{formatTypeName(t)}</Option>
+                  ))}
+                </Dropdown>
+              </>
+            )}
             <div className={styles.columnLabel}>Static value</div>
             {renderStaticEditor()}
           </>
@@ -308,6 +352,37 @@ function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, page
   }
 
   // Fallback: input properties without entity data, or bound without entity data
+
+  // For of-type-group properties without entity data: show Type picker + text input
+  if (typeGroupTypes && typeGroupTypes.length > 0) {
+    return (
+      <div className={styles.field}>
+        <div className={styles.label}>
+          {prop.displayNameKey} {usageBadge}
+          <span className={styles.typeHint}>{selectedType ? formatTypeName(selectedType) : prop.ofTypeGroup}</span>
+        </div>
+        <div className={styles.columnLabel}>Type</div>
+        <Dropdown
+          size="small"
+          selectedOptions={selectedType ? [selectedType] : []}
+          value={selectedType ? formatTypeName(selectedType) : ''}
+          onOptionSelect={(_, d) => { if (d.optionValue) setPropertyType(prop.name, d.optionValue); }}
+        >
+          {typeGroupTypes.map(t => (
+            <Option key={t} value={t} text={formatTypeName(t)}>{formatTypeName(t)}</Option>
+          ))}
+        </Dropdown>
+        <div className={styles.columnLabel} style={{ marginTop: 6 }}>Value</div>
+        <Input
+          size="small"
+          value={typeof value === 'string' ? value : (value != null ? String(value) : '')}
+          onChange={handleTextChange}
+          placeholder={prop.descriptionKey || prop.name}
+        />
+      </div>
+    );
+  }
+
   switch (prop.ofType) {
     case 'Lookup.Simple': {
       const lookup = value as any;
@@ -384,6 +459,45 @@ function PropertyField({ prop, manifest, entityColumns, pageEntityTypeName, page
             size="small"
             value={value ?? 0}
             onChange={handleNumberChange}
+          />
+        </div>
+      );
+
+    case 'Enum':
+      if (prop.enumValues && prop.enumValues.length > 0) {
+        const enumVal = typeof value === 'string' ? value : (value != null ? String(value) : '');
+        return (
+          <div className={styles.field}>
+            <div className={styles.label}>
+              {prop.displayNameKey} {usageBadge}
+              <span className={styles.typeHint}>{prop.ofType}</span>
+            </div>
+            <Dropdown
+              size="small"
+              placeholder="Select an option"
+              selectedOptions={enumVal ? [enumVal] : []}
+              value={prop.enumValues.find(v => v.value === enumVal)?.displayNameKey ?? enumVal}
+              onOptionSelect={(_, d) => setValue(prop.name, d.optionValue ?? null)}
+            >
+              {prop.enumValues.map(v => (
+                <Option key={v.value} value={v.value} text={v.displayNameKey}>{v.displayNameKey}</Option>
+              ))}
+            </Dropdown>
+          </div>
+        );
+      }
+      // Fall through to default text input if no enum values defined
+      return (
+        <div className={styles.field}>
+          <div className={styles.label}>
+            {prop.displayNameKey} {usageBadge}
+            <span className={styles.typeHint}>{prop.ofType}</span>
+          </div>
+          <Input
+            size="small"
+            value={typeof value === 'string' ? value : (value != null ? String(value) : '')}
+            onChange={handleTextChange}
+            placeholder={prop.descriptionKey || prop.name}
           />
         </div>
       );

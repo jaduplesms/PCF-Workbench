@@ -301,11 +301,16 @@ function buildParameters(
   getState: () => HarnessStore,
 ) {
   const params: Record<string, any> = {};
+  const selectedTypes = getState().propertyTypes;
   for (const prop of manifest.properties) {
     const rawVal = propertyValues[prop.name];
     const boundColumn = typeof rawVal === 'string' && rawVal.startsWith('$') ? rawVal.substring(1) : undefined;
     const resolved = resolveFieldBinding(rawVal, getEntityData, getState);
-    params[prop.name] = buildProperty(prop, resolved, boundColumn, getState().pageEntityTypeName);
+    // For of-type-group properties, use the maker's selected type instead of the generic "Property"
+    const effectiveProp = prop.ofTypeGroup && selectedTypes[prop.name]
+      ? { ...prop, ofType: selectedTypes[prop.name] }
+      : prop;
+    params[prop.name] = buildProperty(effectiveProp, resolved, boundColumn, getState().pageEntityTypeName);
   }
   for (const ds of manifest.dataSets) {
     params[ds.name] = buildDataSet(ds, getEntityData, getState);

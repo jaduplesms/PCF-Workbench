@@ -69,6 +69,10 @@ export interface HarnessStore {
   setPropertyValue: (name: string, value: any) => void;
   setPropertyValues: (values: Record<string, any>) => void;
 
+  // Property types (for of-type-group properties — tracks the maker's Type dropdown selection)
+  propertyTypes: Record<string, string>;
+  setPropertyType: (name: string, type: string) => void;
+
   // Network conditioning
   networkMode: NetworkMode;
   customLatencyMs: number;
@@ -147,7 +151,15 @@ export const useHarnessStore = create<HarnessStore>((set, get) => ({
         propertyValues[prop.name] = prop.defaultValue ?? null;
       }
     }
-    set({ manifest, propertyValues });
+    // Initialize property types for of-type-group properties (default to SingleLine.Text)
+    const propertyTypes: Record<string, string> = {};
+    for (const prop of manifest.properties) {
+      if (prop.ofTypeGroup && manifest.typeGroups[prop.ofTypeGroup]) {
+        const groupTypes = manifest.typeGroups[prop.ofTypeGroup];
+        propertyTypes[prop.name] = groupTypes.includes('SingleLine.Text') ? 'SingleLine.Text' : groupTypes[0];
+      }
+    }
+    set({ manifest, propertyValues, propertyTypes });
   },
 
   // Property values
@@ -157,6 +169,12 @@ export const useHarnessStore = create<HarnessStore>((set, get) => ({
   })),
   setPropertyValues: (values) => set(s => ({
     propertyValues: { ...s.propertyValues, ...values },
+  })),
+
+  // Property types
+  propertyTypes: {},
+  setPropertyType: (name, type) => set(s => ({
+    propertyTypes: { ...s.propertyTypes, [name]: type },
   })),
 
   // Network
