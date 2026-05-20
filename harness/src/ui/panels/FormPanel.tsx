@@ -26,14 +26,14 @@ import {
 const useStyles = makeStyles({
   root: {
     padding: '12px',
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    height: '100%',
     boxSizing: 'border-box',
     fontSize: '12px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
+    // No height / overflow here — the parent `sidePanelContent` in
+    // HarnessShell already provides the scroll container. Setting overflow
+    // here produced nested scrollbars at the default side-panel width.
   },
   section: {
     display: 'flex',
