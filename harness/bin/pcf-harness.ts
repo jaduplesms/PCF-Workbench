@@ -99,6 +99,115 @@ program.parse();
 /* Helpers                                                          */
 /* ---------------------------------------------------------------- */
 
+/* ---- Perf budgets (M3.P2.C) ------------------------------------ */
+
+/** Supported metrics for perfBudget. Keep in sync with schema + docs. */
+const BUDGET_METRICS = [
+  'firstUpdateViewMs',
+  'avgRenderTimeMs',
+  'lastRenderTimeMs',
+  'renderCount',
+  'leaks',
+  'unimplementedCount',
+] as const;
+type BudgetMetric = (typeof BUDGET_METRICS)[number];
+
+/** Per-metric budget. A bare number is a hard `fail` limit; an object lets
+ * the user supply soft + hard thresholds independently. */
+type BudgetLimit = number | { warn?: number; fail?: number };
+type PerfBudget = Partial<Record<BudgetMetric, BudgetLimit>>;
+
+interface BudgetViolation {
+  metric: BudgetMetric;
+  actual: number;
+  budget: number;
+  delta: number;
+  severity: 'warn' | 'fail';
+}
+
+interface BudgetReport {
+  status: 'pass' | 'warn' | 'fail';
+  source: string | null;
+  budget: PerfBudget;
+  violations: BudgetViolation[];
+}
+
+/** Walks the same order the Vite plugin uses (control dir, then project
+ * root) and returns the first `data.json` it finds. */
+function locateDataJson(controlPath: string, projectRoot: string): string | null {
+  for (const candidate of [
+    path.join(controlPath, 'data.json'),
+    path.join(projectRoot, 'data.json'),
+  ]) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function loadPerfBudget(controlPath: string, projectRoot: string):
+  { budget: PerfBudget; source: string | null } {
+  const file = locateDataJson(controlPath, projectRoot);
+  if (!file) return { budget: {}, source: null };
+  try {
+    const raw = fs.readFileSync(file, 'utf-8');
+    const json = JSON.parse(raw);
+    const budget = json?.perfBudget ?? {};
+    if (typeof budget !== 'object' || Array.isArray(budget)) return { budget: {}, source: file };
+    return { budget, source: file };
+  } catch {
+    return { budget: {}, source: file };
+  }
+}
+
+function actualForMetric(metric: BudgetMetric, harnessReport: any): number | null {
+  if (!harnessReport) return null;
+  switch (metric) {
+    case 'firstUpdateViewMs':
+      return harnessReport.lifecycle?.firstUpdateViewMs ?? null;
+    case 'avgRenderTimeMs':
+      return harnessReport.performance?.avgRenderTimeMs ?? null;
+    case 'lastRenderTimeMs':
+      return harnessReport.performance?.lastRenderTimeMs ?? null;
+    case 'renderCount':
+      return harnessReport.performance?.renderCount ?? null;
+    case 'leaks':
+      return Array.isArray(harnessReport.leaks) ? harnessReport.leaks.length : null;
+    case 'unimplementedCount':
+      return harnessReport.logs?.unimplementedCount ?? null;
+  }
+}
+
+function normaliseLimit(limit: BudgetLimit): { warn?: number; fail?: number } {
+  if (typeof limit === 'number') return { fail: limit };
+  return {
+    warn: typeof limit?.warn === 'number' ? limit.warn : undefined,
+    fail: typeof limit?.fail === 'number' ? limit.fail : undefined,
+  };
+}
+
+function evaluateBudget(harnessReport: any, budget: PerfBudget, source: string | null): BudgetReport {
+  const violations: BudgetViolation[] = [];
+  for (const metric of BUDGET_METRICS) {
+    if (!(metric in budget)) continue;
+    const raw = budget[metric];
+    if (raw === undefined || raw === null) continue;
+    const { warn, fail } = normaliseLimit(raw as BudgetLimit);
+    const actual = actualForMetric(metric, harnessReport);
+    if (actual === null) continue;
+    if (typeof fail === 'number' && actual > fail) {
+      violations.push({ metric, actual, budget: fail, delta: actual - fail, severity: 'fail' });
+    } else if (typeof warn === 'number' && actual > warn) {
+      violations.push({ metric, actual, budget: warn, delta: actual - warn, severity: 'warn' });
+    }
+  }
+  const status: 'pass' | 'warn' | 'fail' = violations.some(v => v.severity === 'fail')
+    ? 'fail'
+    : violations.some(v => v.severity === 'warn') ? 'warn' : 'pass';
+  return { status, source, budget, violations };
+}
+
+/* ---------------------------------------------------------------- */
+
 function assertControlDir(controlPath: string): void {
   const manifestPath = path.join(controlPath, 'ControlManifest.Input.xml');
   if (!fs.existsSync(manifestPath)) {
@@ -208,6 +317,13 @@ async function runLoop(opts: LoopOpts): Promise<number> {
 
   /* --- 4. Report ------------------------------------------------ */
   const totalMs = Date.now() - t0;
+  const projectRoot = findProjectRoot(opts.controlPath);
+  const { budget: budgetConfig, source: budgetSource } =
+    loadPerfBudget(opts.controlPath, projectRoot);
+  const budget = Object.keys(budgetConfig).length > 0
+    ? evaluateBudget(harnessReport, budgetConfig, budgetSource)
+    : null;
+
   const report = {
     schemaVersion: 1,
     runId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -231,17 +347,25 @@ async function runLoop(opts: LoopOpts): Promise<number> {
       report: harnessReport,
       screenshot: 'screenshot.png',
     },
+    budget,
     summary: summarize({
       buildOk: build.ok,
       renderOk,
       consoleErrors,
       pageErrors,
       harnessReport,
+      budget,
     }),
   };
   writeReport(opts.outDir, report);
 
   console.log(`\n  [summary] ${report.summary.status.toUpperCase()} — ${report.summary.headline}`);
+  if (budget) {
+    const summary = budget.violations.length === 0
+      ? 'all metrics within budget'
+      : `${budget.violations.length} violation(s): ${budget.violations.map(v => `${v.metric} ${v.severity}`).join(', ')}`;
+    console.log(`  [budget]  ${budget.status.toUpperCase()} — ${summary}`);
+  }
   console.log(`  [report]  ${path.join(opts.outDir, 'report.json')}\n`);
 
   return report.summary.status === 'pass' ? 0 : 1;
@@ -330,6 +454,7 @@ function emptyReport(opts: LoopOpts, build: BuildResult, reason: string) {
     control: { path: opts.controlPath },
     build: { ok: build.ok, skipped: opts.skipBuild, durationMs: build.durationMs, errors: build.errors },
     harness: { url: null, ok: false, error: null, consoleErrors: [], pageErrors: [], report: null, screenshot: null },
+    budget: null,
     summary: { status: 'fail', headline: reason, errors: build.errors.length, leaks: 0 },
   };
 }
@@ -340,6 +465,7 @@ interface SummaryInput {
   consoleErrors: string[];
   pageErrors: string[];
   harnessReport: any;
+  budget: BudgetReport | null;
 }
 
 function summarize(s: SummaryInput): { status: 'pass' | 'warn' | 'fail'; headline: string; errors: number; leaks: number } {
@@ -348,6 +474,16 @@ function summarize(s: SummaryInput): { status: 'pass' | 'warn' | 'fail'; headlin
   const errs = s.pageErrors.length + s.consoleErrors.length;
   const leaks = Array.isArray(s.harnessReport?.leaks) ? s.harnessReport.leaks.length : 0;
   if (errs > 0) return { status: 'fail', headline: `${errs} console/page error(s)`, errors: errs, leaks };
+  // Budget violations escalate before resource leaks because they're configured
+  // expectations, while leaks are an absolute floor.
+  if (s.budget?.status === 'fail') {
+    const failed = s.budget.violations.filter(v => v.severity === 'fail');
+    return { status: 'fail', headline: `perf budget exceeded: ${failed.map(v => v.metric).join(', ')}`, errors: 0, leaks };
+  }
   if (leaks > 0) return { status: 'warn', headline: `${leaks} resource leak(s)`, errors: 0, leaks };
+  if (s.budget?.status === 'warn') {
+    const warned = s.budget.violations.filter(v => v.severity === 'warn');
+    return { status: 'warn', headline: `perf budget soft-warn: ${warned.map(v => v.metric).join(', ')}`, errors: 0, leaks };
+  }
   return { status: 'pass', headline: 'control rendered cleanly', errors: 0, leaks };
 }

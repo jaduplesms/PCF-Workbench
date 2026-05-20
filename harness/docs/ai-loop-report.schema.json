@@ -75,15 +75,82 @@
         "status": {
           "type": "string",
           "enum": ["pass", "warn", "fail"],
-          "description": "pass = build ok, control rendered, no errors / leaks. warn = rendered with resource leaks (no errors). fail = build failed OR control never rendered OR console/page errors > 0."
+          "description": "pass = build ok, control rendered, no errors / leaks / budget fails. warn = rendered with resource leaks (no errors) OR budget soft-warn. fail = build failed OR control never rendered OR console/page errors > 0 OR perf budget hard-fail."
         },
         "headline": { "type": "string", "description": "Single-line human-readable summary suitable for CI/agent log lines." },
         "errors": { "type": "integer", "minimum": 0, "description": "consoleErrors + pageErrors count." },
         "leaks": { "type": "integer", "minimum": 0, "description": "harness.report.leaks.length, or 0 when report is null." }
       }
+    },
+    "budget": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/definitions/budgetReport" }
+      ],
+      "description": "Perf-budget evaluation result. Null when no `perfBudget` was found in data.json. When non-null, `status === 'fail'` flips `summary.status` to `fail` and the CLI exits non-zero. See definitions.budgetReport for the shape and definitions.perfBudgetConfig for the user-supplied budget shape that produced it."
     }
   },
   "definitions": {
+    "perfBudgetConfig": {
+      "type": "object",
+      "description": "User-supplied budget shape, lives under `perfBudget` in the control's `data.json` (control dir first, then project root). All metrics optional. Each metric value is either a bare number (hard `fail` limit) or `{ warn?: number, fail?: number }` for independent soft + hard thresholds.",
+      "additionalProperties": false,
+      "properties": {
+        "firstUpdateViewMs": { "$ref": "#/definitions/budgetLimit", "description": "Gap from init → first updateView." },
+        "avgRenderTimeMs": { "$ref": "#/definitions/budgetLimit", "description": "Mean ms inside updateView across the run." },
+        "lastRenderTimeMs": { "$ref": "#/definitions/budgetLimit", "description": "ms inside the most recent updateView." },
+        "renderCount": { "$ref": "#/definitions/budgetLimit", "description": "Total updateView calls. Useful to catch render storms." },
+        "leaks": { "$ref": "#/definitions/budgetLimit", "description": "Resource leak count (listeners + timers + observers)." },
+        "unimplementedCount": { "$ref": "#/definitions/budgetLimit", "description": "Shim log entries flagged unimplemented." }
+      }
+    },
+    "budgetLimit": {
+      "oneOf": [
+        { "type": "number", "minimum": 0 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "warn": { "type": "number", "minimum": 0 },
+            "fail": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "budgetReport": {
+      "type": "object",
+      "required": ["status", "source", "budget", "violations"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "warn", "fail"],
+          "description": "Overall budget status. `fail` if any metric exceeded its hard `fail` threshold; `warn` if only soft thresholds tripped; `pass` otherwise."
+        },
+        "source": {
+          "type": ["string", "null"],
+          "description": "Absolute path of the data.json file the budget was read from. Null if no data.json was found (in which case the budget would be empty and this field would not appear under normal evaluation)."
+        },
+        "budget": {
+          "$ref": "#/definitions/perfBudgetConfig",
+          "description": "The budget config as it was read from disk, echoed back for diffing across runs."
+        },
+        "violations": {
+          "type": "array",
+          "description": "One entry per metric that exceeded its threshold.",
+          "items": {
+            "type": "object",
+            "required": ["metric", "actual", "budget", "delta", "severity"],
+            "properties": {
+              "metric": { "type": "string", "enum": ["firstUpdateViewMs", "avgRenderTimeMs", "lastRenderTimeMs", "renderCount", "leaks", "unimplementedCount"] },
+              "actual": { "type": "number", "description": "Measured value from this run." },
+              "budget": { "type": "number", "description": "Threshold that was exceeded (either the soft `warn` or the hard `fail` limit, depending on severity)." },
+              "delta": { "type": "number", "description": "actual - budget. Always positive when the entry is a violation." },
+              "severity": { "type": "string", "enum": ["warn", "fail"] }
+            }
+          }
+        }
+      }
+    },
     "harnessReport": {
       "type": "object",
       "required": ["schemaVersion", "capturedAt", "control", "lifecycle", "performance", "leaks", "webApi", "logs"],

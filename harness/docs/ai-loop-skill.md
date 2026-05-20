@@ -80,12 +80,22 @@ If `status !== 'pass'`, drill into the report in this order:
 3. **`harness.report.lifecycle.events`** — Was `init` called? Did
    `updateView` fire? An array with `init` only means the control threw
    during render.
-4. **`harness.report.leaks`** — event listeners / timers / observers
+4. **`budget.violations`** — if `budget.status === 'fail'`, a perf
+   threshold was exceeded. Each violation has `metric`, `actual`,
+   `budget`, `delta` (actual minus budget), and `severity`. **Target the
+   `fail`-severity violations first**; `warn`-severity entries are
+   advisory. Common causes: `firstUpdateViewMs` spike = async work added
+   to `init`; `avgRenderTimeMs` spike = expensive computation moved out
+   of `useMemo`; `renderCount` spike = `setState` in `useEffect` without
+   deps; `leaks` non-zero = listeners / timers / observers not cleaned
+   in `destroy()`.
+5. **`harness.report.leaks`** — event listeners / timers / observers
    not cleaned up in `destroy()`. Each leak has `type` and `detail`.
-5. **`harness.report.webApi.errorCount`** — OData / WebAPI errors. See
+6. **`harness.report.webApi.errorCount`** — OData / WebAPI errors. See
    `harness.report.webApi.calls` for the failing requests.
-6. **`harness.report.performance`** — `firstUpdateViewMs > 500` or
-   `avgRenderTimeMs > 50` is worth investigating but not a hard failure.
+7. **`harness.report.performance`** — even without a budget,
+   `firstUpdateViewMs > 500` or `avgRenderTimeMs > 50` is worth
+   investigating.
 
 The full schema is at `harness/docs/ai-loop-report.schema.json`. The
 guided playbook is at `harness/docs/ai-build-loop.md`.

@@ -3,5 +3,11 @@
   "textInput": "hello-conformance",
   "numberInput": 42,
   "boolInput": true,
-  "optionsetInput": 1
+  "optionsetInput": 1,
+  "perfBudget": {
+    "firstUpdateViewMs": { "warn": 300, "fail": 1000 },
+    "avgRenderTimeMs": { "warn": 100, "fail": 200 },
+    "leaks": 0,
+    "unimplementedCount": { "warn": 5, "fail": 20 }
+  }
 }

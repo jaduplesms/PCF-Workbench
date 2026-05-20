@@ -122,6 +122,58 @@ Exit codes: `0` on `pass`, `1` on `warn` or `fail`.
 
 ---
 
+## Setting perf budgets
+
+The loop can enforce per-control performance budgets so a refactor that
+silently doubles render time fails CI immediately. Budgets are opt-in —
+without them the loop behaves exactly as before.
+
+Add a `perfBudget` block to the control's `data.json` (control dir
+first, then project root — same resolution order the harness uses):
+
+```jsonc
+{
+  "record": "ct-record-0001",
+  "textInput": "hello",
+  "perfBudget": {
+    "firstUpdateViewMs": { "warn": 300, "fail": 1000 },
+    "avgRenderTimeMs":   { "warn": 100, "fail": 200 },
+    "leaks": 0,
+    "unimplementedCount": { "warn": 5, "fail": 20 }
+  }
+}
+```
+
+Each metric accepts either a bare number (hard `fail` limit) or
+`{ warn?: number, fail?: number }` for independent soft and hard
+thresholds. Supported metrics:
+
+| Metric | Source | Typical use |
+| --- | --- | --- |
+| `firstUpdateViewMs` | `lifecycle.firstUpdateViewMs` | Catches `init` regressions (synchronous work, `await` inside init). |
+| `avgRenderTimeMs` | `performance.avgRenderTimeMs` | Catches steady-state render regressions. |
+| `lastRenderTimeMs` | `performance.lastRenderTimeMs` | Useful when the last render is the canonical one (most loops only fire one updateView). |
+| `renderCount` | `performance.renderCount` | Catches render storms (e.g. `setState` in `useEffect` without deps). |
+| `leaks` | `harness.report.leaks.length` | Hard cap on listener/timer/observer leaks. Almost always `0`. |
+| `unimplementedCount` | `logs.unimplementedCount` | Catches drift onto unimplemented shims. |
+
+Behaviour:
+
+- **`fail` violation** → `budget.status = "fail"` → `summary.status` is
+  pulled up to `fail` → CLI exits non-zero → CI turns red.
+- **`warn`-only violations** → `budget.status = "warn"` → `summary.status`
+  is `warn` (still exits non-zero, since `warn` is non-pass).
+- **No `perfBudget` in `data.json`** → `budget` is `null` in the report
+  and the loop runs exactly as before.
+- **Missing metric** → not evaluated. Add only the metrics you care
+  about; the rest are ignored.
+
+The `budget.violations[]` array in the report enumerates every metric
+that tripped, with `actual`, `budget`, `delta` (= actual − budget), and
+`severity` so agents and CI can target the worst offender first.
+
+---
+
 ## Tips for agent prompts
 
 - **Always read `summary.status` first.** Don't waste tokens parsing
