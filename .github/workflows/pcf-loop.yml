@@ -40,6 +40,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install Linux system deps (libsecret for keytar)
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev
+
       - name: Install harness deps
         working-directory: harness
         run: npm ci
