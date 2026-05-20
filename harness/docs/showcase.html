@@ -2060,6 +2060,70 @@ p{color:var(--neutral-30)}
   </div>
 </section>
 
+<!-- ── Using the AI Build Loop from Copilot CLI ─── -->
+<section class="section" id="ai-loop-usage" style="padding-top:32px">
+  <div class="container">
+    <div class="section-header reveal">
+      <h2>Use it with GitHub Copilot CLI</h2>
+      <p>The AI Build Loop ships with a drop-in skill so Copilot CLI (or Claude, or any agent that reads markdown skills) drives the loop for you. You type a natural-language prompt; the agent runs <code>pcf-harness loop</code>, reads the JSON report, and iterates.</p>
+    </div>
+
+    <div class="usage-grid reveal" style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start">
+
+      <div>
+        <h3 style="font-size:1.1rem;margin-bottom:8px">1. Install the skill (once)</h3>
+        <p style="font-size:.92rem;color:var(--neutral-30);margin-bottom:0">Copilot CLI loads skills from <code>~/.copilot/skills/&lt;name&gt;/SKILL.md</code>. Copy the shipped skill there:</p>
+<pre class="code-block"><span class="comment"># Windows PowerShell</span>
+<span class="var">$dir</span> = <span class="string">"$env:USERPROFILE\.copilot\skills\pcf-build-loop"</span>
+New-Item -ItemType Directory -Force <span class="var">$dir</span> | Out-Null
+Copy-Item &lt;workbench&gt;\harness\docs\ai-loop-skill.md `
+          <span class="string">"$dir\SKILL.md"</span></pre>
+        <p style="font-size:.82rem;color:var(--neutral-40);margin-top:12px">The skill file has YAML frontmatter (<code>name</code>, <code>description</code>, <code>user-invocable</code>, <code>argument-hint</code>) so Copilot CLI auto-registers it on the next session. You'll see it listed under available skills with these triggers: <em>fix this PCF</em>, <em>iterate on this control</em>, <em>make this PCF render</em>.</p>
+
+        <h3 style="font-size:1.1rem;margin-bottom:8px;margin-top:32px">2. Open Copilot CLI in your PCF project</h3>
+<pre class="code-block"><span class="var">PS</span> C:\repos\MyAwesomePCF&gt; copilot</pre>
+
+        <h3 style="font-size:1.1rem;margin-bottom:8px;margin-top:32px">3. Just ask</h3>
+<pre class="code-block"><span class="string">&gt; this PCF builds but doesn't render anything
+&gt; in the harness, can you fix it?</span></pre>
+        <p style="font-size:.82rem;color:var(--neutral-40);margin-top:12px">No need to remember CLI flags. The skill's trigger keywords match the intent, the agent picks it up, runs the loop, and follows the bounded refactor cycle defined in the skill.</p>
+      </div>
+
+      <div>
+        <h3 style="font-size:1.1rem;margin-bottom:8px">What the agent does</h3>
+        <ol style="font-size:.88rem;color:var(--neutral-30);line-height:1.7;padding-left:20px;margin-top:8px">
+          <li>Runs <code>npx pcf-harness loop --path &lt;your-control&gt;</code></li>
+          <li>Parses <code>report.json</code> against the published schema</li>
+          <li>If <code>summary.status === "pass"</code> &mdash; reports success and stops</li>
+          <li>If <code>fail</code> / <code>warn</code> &mdash; reads <code>lifecycle.events</code>, <code>consoleErrors</code>, <code>leaks</code>, <code>webApi.errorCount</code> to localise the bug</li>
+          <li>Reads the failing source files, plans a <em>minimal single-root-cause</em> fix</li>
+          <li>Applies the edit (you approve), re-runs the loop, repeats</li>
+          <li>Hard-stops after 5 iterations and surfaces the latest report to you</li>
+        </ol>
+
+        <h3 style="font-size:1.1rem;margin-bottom:8px;margin-top:24px">Guardrails baked into the skill</h3>
+        <ul style="font-size:.88rem;color:var(--neutral-30);line-height:1.7;padding-left:20px;margin-top:8px">
+          <li>Never edits <code>harness/</code> sources &mdash; the harness is the fixture, the control is the unit under test</li>
+          <li>One root cause per iteration &mdash; no batching of unrelated fixes</li>
+          <li>If a harness shim is missing (<code>logs.unimplementedCount &gt; 0</code>), the agent surfaces the gap rather than papering over it</li>
+          <li>Stops and asks you for direction after 5 unsuccessful iterations</li>
+        </ul>
+
+        <h3 style="font-size:1.1rem;margin-bottom:8px;margin-top:24px">Try it now</h3>
+<pre class="code-block"><span class="string">&gt; Use the pcf-build-loop skill to run a clean
+&gt; build against samples\ConformanceTester\
+&gt; ConformanceTester and report</span></pre>
+        <p style="font-size:.82rem;color:var(--neutral-40);margin-top:12px">Should return <code>pass</code> against the shipped exhibit in ~3&ndash;15s end-to-end depending on whether the build is cached.</p>
+      </div>
+
+    </div>
+
+    <div class="reveal" style="margin-top:48px;padding:20px 24px;background:var(--neutral-95);border-radius:var(--radius-m);font-size:.88rem;color:var(--neutral-30)">
+      <strong>Works with anything that reads markdown skills.</strong> The same <code>ai-loop-skill.md</code> drops into Claude (Projects &rarr; Skills), Cursor (Rules), or any custom agent that takes a system-prompt fragment. The JSON schema is the durable contract &mdash; agents consume structured data, not stdout.
+    </div>
+  </div>
+</section>
+
 <!-- ── In Planning ─── -->
 <section class="section" style="padding-top:32px">
   <div class="container">

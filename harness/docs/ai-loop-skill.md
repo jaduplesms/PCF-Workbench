@@ -1,3 +1,10 @@
+---
+name: pcf-build-loop
+description: "AI-assisted PCF build loop powered by PCF Workbench. Use when iterating on a Power Apps Component Framework control without a Dataverse org. Runs build + headless harness + Playwright drive + structured JSON report + screenshot via one command. TRIGGER: fix this PCF, iterate on this control, make this PCF render, ControlManifest.Input.xml, pcf-harness, PCF Workbench, debug PCF locally."
+user-invocable: true
+argument-hint: "[fix|iterate|render] <path-to-pcf-control-dir>"
+---
+
 # Skill: AI-Assisted PCF Build Loop
 
 > Drop-in skill / system-prompt fragment for Copilot CLI, Claude, or any
