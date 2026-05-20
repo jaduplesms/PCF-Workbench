@@ -2183,19 +2183,20 @@ Copy-Item &lt;workbench&gt;\harness\docs\ai-loop-skill.md `
 
       <div class="milestone-card later">
         <div class="milestone-h">
-          <h3><span class="milestone-num">M3.P2</span>Scenario Runner + Visual Regression</h3>
+          <h3><span class="milestone-num">M3.P2</span>Perf Budgets &amp; CI Loop</h3>
           <div class="milestone-pills">
-            <span class="milestone-size size-l">L</span>
+            <span class="milestone-size size-s">S</span>
             <span class="milestone-pill pill-later">Later</span>
           </div>
         </div>
-        <p class="ms-desc">Builds on the <a href="#" onclick="document.querySelector('[data-view=&quot;roadmap&quot;]').click();return false">M3.P1 AI Build Loop foundation</a>: iterate the loop across every saved scenario, diff against committed baselines, and enforce per-scenario perf budgets in CI.</p>
+        <p class="ms-desc">Builds on the <a href="#" onclick="document.querySelector('[data-view=&quot;roadmap&quot;]').click();return false">M3.P1 AI Build Loop foundation</a>: turn the loop into a PR-time quality gate. Optional perf budgets per control, a copy-pasteable GitHub Actions workflow, and an auto-posted PR-comment summary.</p>
         <ul class="milestone-list">
-          <li>Headless runner across every saved scenario (not just one control)</li>
-          <li>Per-scenario screenshot, lifecycle log, perf metrics, console output</li>
-          <li>Visual regression with pixel-diff against committed baselines</li>
-          <li>Performance regression detection (render-time budget per scenario)</li>
-          <li>Reusable GitHub Actions workflow that runs the loop on PR and posts the report as a comment</li>
+          <li>Optional <code>perfBudget</code> in <code>data.json</code>: <code>firstUpdateViewMs</code>, <code>avgRenderTimeMs</code>, <code>maxRenderTimeMs</code>, <code>renderCount</code>, <code>leaks</code></li>
+          <li>Soft <code>warn</code> and hard <code>fail</code> thresholds; budget violations flip the loop to non-zero exit</li>
+          <li>Report schema bump to v2: <code>budget.status</code> + <code>budget.violations[]</code> with actual / budget / delta</li>
+          <li>Copy-pasteable <code>.github/workflows/pcf-loop.yml</code> &mdash; runs on PR, uploads report + screenshot as artifacts</li>
+          <li>Auto-posted PR comment: status / lifecycle / leaks / render perf / budget violations</li>
+          <li>Non-zero CLI exit fails the workflow &rarr; PR check red, merge blocked</li>
         </ul>
       </div>
 
