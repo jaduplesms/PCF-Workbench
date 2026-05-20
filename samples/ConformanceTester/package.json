@@ -25,7 +25,7 @@
     "@types/react-dom": "^16.9.24",
     "eslint-plugin-promise": "^7.1.0",
     "eslint-plugin-react": "^7.37.2",
-    "globals": "^15.15.0",
+    "globals": "^17.6.0",
     "pcf-scripts": "^1",
     "pcf-start": "^1",
     "react": "^16.14.0",
