@@ -69,3 +69,10 @@ harness/.fluent-cache/
 
 # Playwright MCP scratch (interactive browser session artifacts)
 .playwright-mcp/
+
+# MAI — AI build loop reports (regenerated on every run)
+pcf-loop-reports/
+harness/pcf-loop-reports/
+samples/*/loop-report/
+samples/MAILoopDemo/out/
+

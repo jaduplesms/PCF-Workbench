@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "runId": "mpe1ka66-n1vj10",
+  "capturedAt": "2026-05-20T12:32:00.894Z",
+  "durationMs": 7004,
+  "control": {
+    "path": "C:\\Github.Copilot\\PowerApps\\PCFWorkbench\\samples\\ConformanceTester\\ConformanceTester"
+  },
+  "build": {
+    "ok": true,
+    "skipped": true,
+    "durationMs": 0,
+    "errors": []
+  },
+  "harness": {
+    "url": "http://127.0.0.1:8181/",
+    "ok": true,
+    "consoleErrors": [],
+    "pageErrors": [],
+    "report": {
+      "schemaVersion": 1,
+      "capturedAt": 1779280320702,
+      "control": {
+        "namespace": "PcfWorkbench",
+        "constructor": "ConformanceTester",
+        "version": "0.0.1",
+        "type": "virtual"
+      },
+      "lifecycle": {
+        "events": [
+          {
+            "method": "init",
+            "durationMs": 0.10000002384185791,
+            "timestamp": 1779280320162
+          },
+          {
+            "method": "updateView",
+            "durationMs": 27.800000071525574,
+            "timestamp": 1779280320214
+          }
+        ],
+        "initCalled": true,
+        "firstUpdateViewMs": 52
+      },
+      "performance": {
+        "renderCount": 1,
+        "lastRenderTimeMs": 27.800000071525574,
+        "avgRenderTimeMs": 27.8,
+        "domNodeCount": 505,
+        "jsHeapUsedMB": 82.3974609375
+      },
+      "leaks": [],
+      "webApi": {
+        "totalCalls": 0,
+        "errorCount": 0,
+        "calls": []
+      },
+      "logs": {
+        "recent": [
+          {
+            "category": "data",
+            "method": "reload"
+          },
+          {
+            "category": "lifecycle",
+            "method": "init"
+          },
+          {
+            "category": "lifecycle",
+            "method": "updateView"
+          }
+        ],
+        "unimplementedCount": 0
+      }
+    },
+    "screenshot": "screenshot.png"
+  },
+  "summary": {
+    "status": "pass",
+    "headline": "control rendered cleanly",
+    "errors": 0,
+    "leaks": 0
+  }
+}

@@ -1,0 +1,151 @@
+# AI-Assisted PCF Build Loop
+
+> *Internal milestone MAI.* This document describes how an AI coding agent
+> can drive PCF Workbench end-to-end — build, run, screen, analyse,
+> refactor — without a Dataverse org or human-in-the-loop.
+
+## TL;DR
+
+```bash
+cd harness
+npm run harness -- loop --path <absolute-path-to-pcf-control>
+# → writes ./pcf-loop-reports/report.json + screenshot.png
+```
+
+Read `report.json`. If `summary.status !== 'pass'`, edit the control
+sources, re-run. Loop until green.
+
+---
+
+## The loop
+
+```
+   ┌──────────────────────────────────────────────────────┐
+   │            pcf-harness loop --path <dir>             │
+   └──────────────────────────────────────────────────────┘
+                          │
+                          ▼
+        ┌────────┐   ┌─────────┐   ┌────────────┐   ┌─────────┐
+        │  Build │ → │  Run    │ → │  Screen    │ → │ Analyse │
+        │ (npm)  │   │ (Vite)  │   │ (Playwrt)  │   │ (JSON)  │
+        └────────┘   └─────────┘   └────────────┘   └─────────┘
+            │           │              │                  │
+            ▼           ▼              ▼                  ▼
+        ts errors   port=auto      screenshot         report.json
+                    headless       console errors
+                                   lifecycle events
+                                   leaks / WebAPI
+
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │  Refactor   │  ← agent reads report,
+                   │  (you/AI)   │     edits sources, loops
+                   └─────────────┘
+```
+
+### Each step
+
+1. **Build** — runs `npm run build` in the project root (walked up from
+   `--path`). On failure the loop stops with `build.errors[]` populated
+   and `summary.status = 'fail'`. Skip with `--skip-build` when iterating
+   on harness wiring only.
+2. **Run** — finds a free port from 8181 upward and starts the harness
+   Vite server in-process. `PCF_CONTROL_PATH` is exported so the Vite
+   plugin loads the target control.
+3. **Screen** — launches headless Chromium (1920×1080), navigates to the
+   harness root, and waits for `window.__pcfwbHarnessReady === true`.
+   That flag flips on the first successful `updateView`. Default timeout
+   60s — override with `--timeout 120000`.
+4. **Analyse** — calls `window.__pcfwbHarnessReport()` (installed by
+   `src/test-bridge.ts`) and serialises lifecycle events, performance
+   metrics, resource leaks, WebAPI calls, and the shim log into the
+   report. Adds Playwright-captured `consoleErrors` + `pageErrors`.
+
+The CLI exits `0` only when `summary.status === 'pass'`.
+
+---
+
+## Report shape
+
+Authoritative schema: [`ai-loop-report.schema.json`](./ai-loop-report.schema.json).
+
+Top-level keys an agent should read first:
+
+| Key | Why it matters |
+| --- | --- |
+| `summary.status` | `pass` / `warn` / `fail` — single-bit health. |
+| `summary.headline` | One-line human-readable reason. |
+| `build.errors` | Up to 30 TS / pcf-scripts error lines. |
+| `harness.consoleErrors` + `harness.pageErrors` | Browser-side errors. |
+| `harness.report.lifecycle.events` | Did `init` run? Did `updateView` fire? `destroy`? |
+| `harness.report.lifecycle.firstUpdateViewMs` | First-paint latency. |
+| `harness.report.leaks` | Event listeners / timers / observers not cleaned up. |
+| `harness.report.performance.avgRenderTimeMs` | Render-time budget check. |
+| `harness.report.webApi.errorCount` | OData / WebAPI failures. |
+| `harness.report.logs.unimplementedCount` | Control hit a shim that's wired but does nothing — surfaces missing harness coverage. |
+
+`screenshot.png` sits next to `report.json` in the same `--out` directory.
+
+---
+
+## Remediation playbook
+
+A short decision table the agent can follow when `status !== 'pass'`:
+
+| Symptom in report | Likely cause | First thing to try |
+| --- | --- | --- |
+| `build.ok = false`, TS errors in `build.errors` | Type or import error in the PCF source. | Open the cited file/line; fix; re-run. |
+| `harness.ok = false`, `harness.error` matches `__pcfwbHarnessReady` timeout | Control threw during `init` or never called `notifyOutputChanged`. | Inspect `consoleErrors` + `pageErrors`; check `lifecycle.initCalled`. |
+| `consoleErrors` mentions `Cannot read properties of undefined` near a Fluent name | Manifest declares wrong Fluent version, or the control imports a v9 API from a v8 namespace. | Re-check `ControlManifest.Input.xml` `<platform-library>` entries. |
+| `pageErrors` mentions `Hooks can only be called inside the body of a function component` | Two React copies on the page. | Confirm the control externalises React (manifest `<platform-library name="React" .../>`). |
+| `harness.report.leaks[].type = eventListener` | Handler added in `init` not removed in `destroy`. | Audit `destroy()` for matching `removeEventListener`. |
+| `harness.report.leaks[].type = timer` | `setInterval` / `setTimeout` not cleared. | Track returned IDs and clear them in `destroy()`. |
+| `harness.report.lifecycle.firstUpdateViewMs > 500` | Heavy synchronous work in `init` or first `updateView`. | Defer non-critical work; profile renders. |
+| `harness.report.logs.unimplementedCount > 0` | Control depends on a harness shim that has no behaviour. | Check `logs.recent` for the method; see if a fixture / scenario can supply the missing data. |
+
+---
+
+## CLI reference
+
+```text
+pcf-harness loop --path <dir>
+  --out <dir>          Where to write report.json + screenshot.png
+                       (default: ./pcf-loop-reports)
+  --skip-build         Reuse existing out/controls/<Name>/bundle.js
+  --timeout <ms>       Max ms to wait for the first updateView
+                       (default: 60000)
+  --headed             Run Chromium in headed mode for debugging
+```
+
+Exit codes: `0` on `pass`, `1` on `warn` or `fail`.
+
+---
+
+## Tips for agent prompts
+
+- **Always read `summary.status` first.** Don't waste tokens parsing
+  the full report when a one-line headline tells you what to fix.
+- **Don't trust `screenshot.png` for layout judgements when
+  `summary.status = 'fail'`** — the screenshot may have been taken
+  before mount.
+- **Diff successive runs by `runId`.** Same control + same sources
+  should produce identical `lifecycle.events.length`,
+  `performance.renderCount`, and `webApi.totalCalls`. Drift on any of
+  those is a regression signal.
+- **`warn` is not safe to merge.** A resource leak today is a perf
+  bug tomorrow.
+
+---
+
+## Worked example
+
+See [`samples/MAILoopDemo/`](../../samples/MAILoopDemo/README.md) for a
+deliberately broken control + the resulting report, and the fix that
+takes it green.
+
+## Reference agent prompt
+
+The drop-in skill that teaches an agent to run and interpret this loop
+lives at [`harness/docs/ai-loop-skill.md`](./ai-loop-skill.md). Use it
+verbatim as a Copilot CLI skill or as a Claude system-prompt fragment.
