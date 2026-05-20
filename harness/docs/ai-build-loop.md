@@ -174,6 +174,48 @@ that tripped, with `actual`, `budget`, `delta` (= actual − budget), and
 
 ---
 
+## Running in CI (GitHub Actions)
+
+The build loop is designed to run on every pull request so regressions
+are caught **before** merge — not after a developer notices the broken
+control in production.
+
+A ready-to-use GitHub Actions workflow lives at
+[`examples/pcf-loop.yml`](./examples/pcf-loop.yml). Copy it into your
+PCF project at `.github/workflows/pcf-loop.yml`, edit the three `env`
+variables (`PCF_PROJECT_DIR`, `PCF_CONTROL_DIR`, `PCF_WORKBENCH_REF`),
+and commit. From the next PR onwards:
+
+1. Workflow triggers when a PR touches `**/*.ts`, `**/*.tsx`,
+   `**/ControlManifest.Input.xml`, `**/*.css`, or `**/data.json`.
+2. It builds your control, clones Workbench, runs `pcf-harness loop`.
+3. `report.json` + `screenshot.png` are uploaded as the
+   `pcf-loop-reports` artifact (30-day retention by default).
+4. A sticky comment is posted (and updated on each push) on the PR
+   with a one-table summary:
+
+   ```text
+   🤖 PCF Build Loop — ❌ FAIL
+   Render: ✅ rendered
+   Leaks:  ✅ none
+   Budget: ❌ fail
+           ❌ avgRenderTimeMs 312 (fail >200)
+   Perf:   firstUpdateView: 180ms · avgRender: 312ms · renders: 1
+   ```
+5. The workflow exits non-zero on `warn` or `fail`, turning the PR
+   check red. Combine with branch protection to block merge.
+
+**Pin the Workbench ref.** The example sets `PCF_WORKBENCH_REF: 'main'`
+so you always get the latest, but production teams should pin to a
+known-good commit (`PCF_WORKBENCH_REF: 'abc1234'`) and bump
+deliberately when they're ready to absorb upstream changes.
+
+**Cost.** A run takes ~90 seconds on `ubuntu-latest`. GitHub-hosted
+runners are free for public repos and have generous monthly quotas on
+private repos (2,000 min/month on Free).
+
+---
+
 ## Tips for agent prompts
 
 - **Always read `summary.status` first.** Don't waste tokens parsing

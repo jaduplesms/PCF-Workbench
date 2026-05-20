@@ -1,0 +1,47 @@
+# Dependabot keeps npm deps for the harness, samples, and GitHub Actions
+# up to date. See https://docs.github.com/code-security/dependabot
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /harness
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - harness
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /samples/ConformanceTester
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - samples
+
+  - package-ecosystem: npm
+    directory: /samples/MAILoopDemo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - samples
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - github-actions
