@@ -2036,6 +2036,26 @@ p{color:var(--neutral-30)}
           <li class="done">Versioned shim profiles (Dataverse 9.0 vs 9.2 vs latest)</li>
         </ul>
       </div>
+
+      <div class="milestone-card shipped">
+        <div class="milestone-h">
+          <h3><span class="milestone-num">M3.P1</span>AI Build Loop foundation</h3>
+          <div class="milestone-pills">
+            <span class="milestone-size size-m">M</span>
+            <span class="milestone-pill pill-shipped">Shipped</span>
+          </div>
+        </div>
+        <p class="ms-desc">First half of <strong>Scenario Runner + Playwright</strong>: a one-command <code>pcf-harness loop</code> CLI that wraps build &rarr; headless harness &rarr; Playwright drive &rarr; deterministic JSON report. Built so AI coding agents can iterate on a PCF unattended (build &rarr; run &rarr; screen &rarr; analyse &rarr; refactor) without a Dataverse org. The published JSON schema is the contract agents read.</p>
+        <ul class="milestone-list">
+          <li class="done"><code>npx pcf-harness loop --path &lt;control&gt;</code> CLI (build + Vite + Playwright + report in-process)</li>
+          <li class="done">Read-only <code>window.__pcfwbHarnessReport()</code> bridge for headless drivers</li>
+          <li class="done">Stable JSON report: lifecycle events, console errors, resource leaks, WebAPI calls, render perf, screenshot</li>
+          <li class="done">Published JSON Schema (<code>ai-loop-report.schema.json</code>) as the contract for agents</li>
+          <li class="done">Walkthrough + remediation playbook (<code>ai-build-loop.md</code>)</li>
+          <li class="done">Drop-in Copilot CLI / Claude system-prompt skill (<code>ai-loop-skill.md</code>)</li>
+          <li class="done">Worked example: real PASS exhibit captured against ConformanceTester</li>
+        </ul>
+      </div>
     </div>
   </div>
 </section>
@@ -2059,11 +2079,12 @@ p{color:var(--neutral-30)}
         </div>
         <p class="ms-desc">Optional connected mode that replaces <code>data.json</code> with a real org via <code>pac auth</code>. Read-only by default. The killer feature: snapshot live data into <code>data.json</code> for offline replay.</p>
         <ul class="milestone-list">
-          <li>Live mode toggle using the active <code>pac auth</code> profile</li>
-          <li>Read-only by default; writes require per-call confirmation</li>
+          <li class="done">Live mode toggle using the active <code>pac auth</code> profile</li>
+          <li class="done">Read-only by default</li>
+          <li>Writes require per-call confirmation</li>
           <li>On-disk response cache &mdash; second run is offline-fast</li>
           <li>One-click "snapshot live data into data.json"</li>
-          <li>Visual indicator when control is hitting live data</li>
+          <li class="done">Visual indicator when control is hitting live data</li>
           <li>Per-scenario binding so scenarios pin to live or mock</li>
         </ul>
       </div>
@@ -2083,19 +2104,19 @@ p{color:var(--neutral-30)}
 
       <div class="milestone-card later">
         <div class="milestone-h">
-          <h3><span class="milestone-num">M3</span>Scenario Runner + Playwright</h3>
+          <h3><span class="milestone-num">M3.P2</span>Scenario Runner + Visual Regression</h3>
           <div class="milestone-pills">
             <span class="milestone-size size-l">L</span>
             <span class="milestone-pill pill-later">Later</span>
           </div>
         </div>
-        <p class="ms-desc">Turn the harness into a test framework, not just a dev tool.</p>
+        <p class="ms-desc">Builds on the <a href="#" onclick="document.querySelector('[data-view=&quot;roadmap&quot;]').click();return false">M3.P1 AI Build Loop foundation</a>: iterate the loop across every saved scenario, diff against committed baselines, and enforce per-scenario perf budgets in CI.</p>
         <ul class="milestone-list">
-          <li>Headless runner across every saved scenario</li>
+          <li>Headless runner across every saved scenario (not just one control)</li>
           <li>Per-scenario screenshot, lifecycle log, perf metrics, console output</li>
           <li>Visual regression with pixel-diff against committed baselines</li>
           <li>Performance regression detection (render-time budget per scenario)</li>
-          <li>Reusable GitHub Actions workflow</li>
+          <li>Reusable GitHub Actions workflow that runs the loop on PR and posts the report as a comment</li>
         </ul>
       </div>
 
