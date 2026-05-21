@@ -4,6 +4,7 @@ import { useHarnessStore } from '../../store/harness-store';
 import { ControlHost, type ControlHostState } from '../../loader/control-host';
 import type { ManifestConfig } from '../../types/manifest';
 import { FormNotificationBanner } from '../FormNotificationBanner';
+import { registerHarnessHost } from '../../test-bridge';
 
 const useStyles = makeStyles({
   root: {
@@ -192,12 +193,14 @@ export function ControlViewport({ manifest, bundlePath, cssFiles }: Props) {
       setHostState,
     );
     hostRef.current = host;
+    registerHarnessHost(host);
     host.load(containerRef.current);
 
     return () => {
       // Clean up control CSS on unmount
       document.querySelectorAll('link[data-pcf-css]').forEach(el => el.remove());
       host.destroy();
+      registerHarnessHost(null);
       hostRef.current = null;
     };
   }, [manifest, bundlePath]); // Only reload on manifest/bundle change

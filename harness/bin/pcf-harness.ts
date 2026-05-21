@@ -301,6 +301,20 @@ async function runLoop(opts: LoopOpts): Promise<number> {
       path: path.join(opts.outDir, 'screenshot.png'),
       fullPage: true,
     });
+
+    // Force a destroy so the resource tracker can diff listeners/timers/
+    // observers. Re-read the report so `leaks` reflects post-destroy state.
+    // Done after the screenshot — destroy unmounts the React tree.
+    const destroyRan = await page.evaluate(
+      () => (window as any).__pcfwbHarnessDestroy?.() ?? false,
+    );
+    if (destroyRan) {
+      // Tiny pause to let the destroy lifecycle event propagate to the store.
+      await page.waitForTimeout(50);
+      harnessReport = await page.evaluate(
+        () => (window as any).__pcfwbHarnessReport?.() ?? harnessReport,
+      );
+    }
   } catch (err: any) {
     renderError = err?.message ?? String(err);
     // Best-effort screenshot for diagnostics.
@@ -309,6 +323,19 @@ async function runLoop(opts: LoopOpts): Promise<number> {
         path: path.join(opts.outDir, 'screenshot.png'),
         fullPage: true,
       });
+    } catch { /* ignore */ }
+    // Even on render failure, try to harvest leak info — the host may have
+    // mounted before the crash.
+    try {
+      const destroyRan = await page.evaluate(
+        () => (window as any).__pcfwbHarnessDestroy?.() ?? false,
+      );
+      if (destroyRan) {
+        await page.waitForTimeout(50);
+        harnessReport = await page.evaluate(
+          () => (window as any).__pcfwbHarnessReport?.() ?? null,
+        );
+      }
     } catch { /* ignore */ }
   } finally {
     await browser.close().catch(() => {});
@@ -469,10 +496,10 @@ interface SummaryInput {
 }
 
 function summarize(s: SummaryInput): { status: 'pass' | 'warn' | 'fail'; headline: string; errors: number; leaks: number } {
-  if (!s.buildOk) return { status: 'fail', headline: 'build failed', errors: 0, leaks: 0 };
-  if (!s.renderOk) return { status: 'fail', headline: 'control did not render', errors: s.pageErrors.length + s.consoleErrors.length, leaks: 0 };
-  const errs = s.pageErrors.length + s.consoleErrors.length;
   const leaks = Array.isArray(s.harnessReport?.leaks) ? s.harnessReport.leaks.length : 0;
+  if (!s.buildOk) return { status: 'fail', headline: 'build failed', errors: 0, leaks: 0 };
+  if (!s.renderOk) return { status: 'fail', headline: 'control did not render', errors: s.pageErrors.length + s.consoleErrors.length, leaks };
+  const errs = s.pageErrors.length + s.consoleErrors.length;
   if (errs > 0) return { status: 'fail', headline: `${errs} console/page error(s)`, errors: errs, leaks };
   // Budget violations escalate before resource leaks because they're configured
   // expectations, while leaks are an absolute floor.

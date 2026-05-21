@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "runId": "mpf707fa-ql6omq",
+  "capturedAt": "2026-05-21T07:52:08.086Z",
+  "durationMs": 64054,
+  "control": {
+    "path": "C:\\Github.Copilot\\PowerApps\\PCFWorkbench\\samples\\MAILoopBroken\\MAILoopBroken"
+  },
+  "build": {
+    "ok": true,
+    "skipped": true,
+    "durationMs": 0,
+    "errors": []
+  },
+  "harness": {
+    "url": "http://127.0.0.1:8181/",
+    "ok": false,
+    "error": "page.waitForFunction: Timeout 60000ms exceeded.",
+    "consoleErrors": [
+      "The above error occurred in the <HelloWorld> component:\n    in HelloWorld\n    in VirtualWrapper\n\nConsider adding an error boundary to your tree to customize error handling behavior.\nVisit https://fb.me/react-error-boundaries to learn more about error boundaries.",
+      "[pcf-workbench] Load error: Cannot read properties of undefined (reading 'value')"
+    ],
+    "pageErrors": [
+      "Cannot read properties of undefined (reading 'value')"
+    ],
+    "report": {
+      "schemaVersion": 1,
+      "capturedAt": 1779349927993,
+      "control": {
+        "namespace": "PcfWorkbench",
+        "constructor": "MAILoopBroken",
+        "version": "0.0.1",
+        "type": "virtual"
+      },
+      "lifecycle": {
+        "events": [
+          {
+            "method": "init",
+            "durationMs": 0.10000002384185791,
+            "timestamp": 1779349867331
+          },
+          {
+            "method": "destroy",
+            "durationMs": 0,
+            "timestamp": 1779349927921
+          }
+        ],
+        "initCalled": true,
+        "firstUpdateViewMs": null
+      },
+      "performance": {
+        "renderCount": 0,
+        "lastRenderTimeMs": 0,
+        "avgRenderTimeMs": 0,
+        "domNodeCount": 0,
+        "jsHeapUsedMB": 0
+      },
+      "leaks": [
+        {
+          "type": "eventListener",
+          "detail": "window.addEventListener(\"resize\") not removed"
+        },
+        {
+          "type": "timer",
+          "detail": "setInterval(1000ms) not cleared"
+        },
+        {
+          "type": "observer",
+          "detail": "ResizeObserver.disconnect() not called"
+        },
+        {
+          "type": "observer",
+          "detail": "MutationObserver.disconnect() not called"
+        }
+      ],
+      "webApi": {
+        "totalCalls": 0,
+        "errorCount": 0,
+        "calls": []
+      },
+      "logs": {
+        "recent": [
+          {
+            "category": "data",
+            "method": "reload"
+          },
+          {
+            "category": "lifecycle",
+            "method": "init"
+          },
+          {
+            "category": "lifecycle",
+            "method": "destroy"
+          },
+          {
+            "category": "lifecycle",
+            "method": "destroy"
+          }
+        ],
+        "unimplementedCount": 0
+      }
+    },
+    "screenshot": "screenshot.png"
+  },
+  "budget": null,
+  "summary": {
+    "status": "fail",
+    "headline": "control did not render",
+    "errors": 3,
+    "leaks": 4
+  }
+}

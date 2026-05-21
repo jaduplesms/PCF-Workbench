@@ -122,6 +122,10 @@ export class ControlHost {
         }, 0);
       };
 
+      // Start tracking resources before init so we catch listeners/timers/
+      // observers that the control registers during init() itself.
+      this.resourceTracker.install(container);
+
       // init()
       const initStart = performance.now();
       if (this.manifest.controlType === 'standard') {
@@ -136,9 +140,6 @@ export class ControlHost {
         args: { controlType: this.manifest.controlType, durationMs: Math.round(initMs) },
       });
       this.getState().addLifecycleEvent({ method: 'init', durationMs: initMs });
-
-      // Start tracking resources after init so we can detect leaks on destroy
-      this.resourceTracker.install(container);
 
       // First updateView
       this.callUpdateView();

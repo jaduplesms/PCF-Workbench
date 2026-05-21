@@ -1,31 +1,19 @@
-# MAI Loop Demo — worked example
+# MAI Loop Demo — worked examples
 
 This folder is a tutorial fixture for the
 [AI-Assisted PCF Build Loop](../../harness/docs/ai-build-loop.md). It
-shows what a clean `pcf-harness loop` report looks like against a
-working control, and walks through what an agent should do when the
-report regresses.
+ships **three real reports** captured from `pcf-harness loop` runs:
 
-The "pass" exhibit is generated from the in-tree
-[`ConformanceTester`](../ConformanceTester/) sample — a real PCF that
-exercises every shim surface the harness provides. The "fail" /
-"warn" exhibits are illustrative.
+| Status | Report | Screenshot | Source control |
+| --- | --- | --- | --- |
+| `pass` | `report-pass-conformance.json` | `screenshot-pass-conformance.png` | [`ConformanceTester`](../ConformanceTester/) — a clean control that exercises every shim surface. |
+| `warn` | `report-warn-leaks.json` | `screenshot-warn.png` | [`MAILoopBroken`](../MAILoopBroken/) with the render bug commented out — leaves the two leaks intact. |
+| `fail` | `report-fail-render.json` | `screenshot-fail.png` | [`MAILoopBroken`](../MAILoopBroken/) as-shipped — render crash *and* leaks. |
 
-> Why illustrative and not literal? The MAI milestone (Chunk 2) ships
-> the worked-example narrative + the live PASS fixture. A literal
-> deliberately-broken in-tree control follows in a later chunk
-> (`mai-loop-broken-fixture`) — it requires its own `pac pcf init` +
-> sources, which we deferred to keep this milestone focused on the
-> loop CLI + docs.
-
----
-
-## Files
-
-| File | What |
-| --- | --- |
-| `report-pass-conformance.json` | Real report from `npx pcf-harness loop --path ../ConformanceTester/ConformanceTester --skip-build`. `summary.status = pass`. |
-| `screenshot-pass-conformance.png` | Full-page Playwright screenshot captured during that run. |
+`MAILoopBroken` is deliberately broken: it registers a `setInterval`
+and a `window` resize listener in `init()` that `destroy()` never
+cleans up, and its `render()` dereferences an undefined prop. The loop
+must catch all of it.
 
 ---
 
@@ -56,23 +44,15 @@ Expected output (last two lines):
   [report]  .../samples/MAILoopDemo/out/report.json
 ```
 
-Compare your fresh `out/report.json` against
-`report-pass-conformance.json`. The following should match exactly or
-within a small tolerance:
+Diff `out/report.json` against `report-pass-conformance.json`:
 
 | Field | Expected | Tolerance |
 | --- | --- | --- |
 | `summary.status` | `pass` | exact |
 | `summary.errors` | `0` | exact |
-| `summary.leaks` | `0` | exact |
 | `harness.ok` | `true` | exact |
 | `harness.report.lifecycle.initCalled` | `true` | exact |
-| `harness.report.lifecycle.events.length` | `2` (init + updateView) | ±0 |
 | `harness.report.performance.renderCount` | `1` | ±0 |
-| `harness.report.performance.avgRenderTimeMs` | `≈28 ms` | ±50% |
-| `harness.report.lifecycle.firstUpdateViewMs` | `≈50 ms` | ±100% |
-| `harness.report.leaks.length` | `0` | exact |
-| `harness.report.webApi.totalCalls` | `0` | exact |
 | `harness.consoleErrors.length` | `0` | exact |
 | `harness.pageErrors.length` | `0` | exact |
 
@@ -80,85 +60,66 @@ If anything in the **exact** rows drifts, you've found a regression.
 
 ---
 
-## Illustrative FAIL report
+## Reproducing the FAIL exhibit
 
-This is what an agent would see if a control's `destroy()` forgot to
-remove a `resize` event listener and threw on its first `updateView`:
-
-```jsonc
-{
-  "schemaVersion": 1,
-  "runId": "loop-fail-example",
-  "summary": {
-    "status": "fail",
-    "headline": "1 console/page error(s)",
-    "errors": 1,
-    "leaks": 1
-  },
-  "build": { "ok": true, "skipped": false, "durationMs": 6800, "errors": [] },
-  "harness": {
-    "ok": true,
-    "url": "http://127.0.0.1:8181/",
-    "consoleErrors": [],
-    "pageErrors": [
-      "TypeError: Cannot read properties of undefined (reading 'value')"
-    ],
-    "report": {
-      "lifecycle": {
-        "initCalled": true,
-        "firstUpdateViewMs": 42,
-        "events": [
-          { "method": "init",       "durationMs": 5.1,  "timestamp": 1716200000000 },
-          { "method": "updateView", "durationMs": 12.3, "timestamp": 1716200000042,
-            "error": "TypeError: Cannot read properties of undefined (reading 'value')" }
-        ]
-      },
-      "leaks": [
-        { "type": "eventListener",
-          "detail": "resize listener registered in init() but not removed in destroy()" }
-      ],
-      "webApi":  { "totalCalls": 0, "errorCount": 0, "calls": [] },
-      "logs":    { "recent": [], "unimplementedCount": 0 }
-    }
-  }
-}
+```bash
+cd samples/MAILoopBroken
+npm install
+npm run build
+cd ../../harness
+npm run harness -- loop \
+  --path ../samples/MAILoopBroken/MAILoopBroken \
+  --out ../samples/MAILoopDemo/out-fail \
+  --skip-build
 ```
+
+Expected last lines:
+
+```
+  [summary] FAIL — control did not render
+```
+
+The report (compare to `report-fail-render.json`) will contain:
+
+- `summary.status = "fail"`, `summary.errors = 3` (one `pageError`,
+  two matching `consoleErrors`)
+- `harness.pageErrors[0]` =
+  `"Cannot read properties of undefined (reading 'value')"`
+- `harness.report.leaks` (4 entries):
+  - `eventListener — window.addEventListener("resize") not removed`
+  - `timer — setInterval(1000ms) not cleared`
+  - `observer — ResizeObserver.disconnect() not called`
+  - `observer — MutationObserver.disconnect() not called`
 
 ### How an agent should read this
 
 1. `summary.status = fail` → must act.
-2. `summary.errors = 1` and `pageErrors[0]` names the throw — open the
-   control's `updateView()`, locate the `undefined.value` access.
+2. `summary.errors > 0` and `pageErrors[0]` names the throw — open the
+   control's `render()`, find the `undefined.value` access (`crashMe!.value`).
 3. `lifecycle.events[1].error` confirms the throw happened during the
    first `updateView`, not later.
-4. `leaks[0].type = eventListener` → audit `destroy()` for matching
-   `removeEventListener('resize', ...)`.
-5. Apply the smallest fix (typically: guard the property access in
-   `updateView`; ensure the listener handle is stashed and removed in
-   `destroy`).
+4. Each `leaks[]` entry maps directly to an unclean resource — audit
+   `destroy()` for matching `clearInterval` / `removeEventListener`
+   /`disconnect()` calls.
+5. Apply the smallest fixes (guard the property access; stash the
+   `setInterval` id and clear it in destroy; remove the resize
+   listener; disconnect observers).
 6. Re-run the loop. Expect `status = pass` if the diagnosis was right.
 
 ---
 
-## Illustrative WARN report
+## Reproducing the WARN exhibit
 
 `warn` means render succeeded with no console errors **but** at least
-one resource leak was detected:
+one resource leak was detected. To capture this from `MAILoopBroken`,
+temporarily disable the render bug in
+`samples/MAILoopBroken/MAILoopBroken/HelloWorld.tsx` (comment out the
+`crashMe!.value` line), rebuild, then re-run the loop. You'll get the
+same leak inventory minus the observers that the React unmount path
+clears once render succeeds:
 
-```jsonc
-{
-  "schemaVersion": 1,
-  "summary": { "status": "warn", "headline": "2 resource leak(s)", "errors": 0, "leaks": 2 },
-  "harness": {
-    "ok": true,
-    "report": {
-      "leaks": [
-        { "type": "timer",        "detail": "setInterval id=4 (10000ms) not cleared in destroy()" },
-        { "type": "observer",     "detail": "MutationObserver instance #1 not disconnected" }
-      ]
-    }
-  }
-}
+```
+  [summary] WARN — 3 resource leak(s)
 ```
 
 `warn` returns exit code `1` — CI must treat it as a hard fail. A
@@ -171,3 +132,4 @@ control that leaks today is a perf bug tomorrow.
 - Loop walkthrough: [`harness/docs/ai-build-loop.md`](../../harness/docs/ai-build-loop.md)
 - Report schema:    [`harness/docs/ai-loop-report.schema.json`](../../harness/docs/ai-loop-report.schema.json)
 - Drop-in skill:    [`harness/docs/ai-loop-skill.md`](../../harness/docs/ai-loop-skill.md)
+- Broken fixture:   [`samples/MAILoopBroken/`](../MAILoopBroken/)

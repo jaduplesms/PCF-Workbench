@@ -144,4 +144,28 @@ export function installTestBridge(): void {
       return s.lifecycleEvents.some(e => e.method === 'updateView' && !e.error);
     },
   });
+  // Lets drivers trigger destroy() on demand so the resource-tracker
+  // can diff listeners/timers/observers and the next __pcfwbHarnessReport()
+  // call surfaces the resulting `leaks` array. Returns true if the host
+  // was registered and destroy ran, false if no control is mounted.
+  w.__pcfwbHarnessDestroy = (): boolean => {
+    if (!harnessHost) return false;
+    try {
+      harnessHost.destroy();
+    } catch {
+      // destroy errors are already captured in lifecycle events
+    }
+    return true;
+  };
+}
+
+/**
+ * Host registry — set by ControlViewport when it instantiates a ControlHost,
+ * cleared on unmount. Used by `window.__pcfwbHarnessDestroy()` so external
+ * drivers (loop CLI, Playwright) can force a destroy and pick up leaks.
+ */
+let harnessHost: { destroy: () => void } | null = null;
+
+export function registerHarnessHost(host: { destroy: () => void } | null): void {
+  harnessHost = host;
 }

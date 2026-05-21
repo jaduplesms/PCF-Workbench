@@ -190,7 +190,22 @@ export class ResourceTracker {
   getLeaks(): ResourceLeak[] {
     const leaks: ResourceLeak[] = [];
 
+    // Playwright injects a fixed set of window listeners for input synthesis
+    // and a probe event. Filter these so the report shows only listeners the
+    // user's control actually registered.
+    const PLAYWRIGHT_NOISE = new Set([
+      '__playwright_global_listeners_check__',
+      'mousemove', 'mousedown', 'mouseup', 'click', 'auxclick', 'dblclick',
+      'contextmenu', 'pointerdown', 'pointerup',
+      'touchstart', 'touchend', 'touchcancel',
+    ]);
+
     for (const l of this.listeners) {
+      // Framework-level noise: document listeners are nearly always added by
+      // UI libraries (Fluent click-outside, React event delegation) and not
+      // the control's responsibility to clean up.
+      if (l.target === document) continue;
+      if (l.target === window && PLAYWRIGHT_NOISE.has(l.type)) continue;
       const targetName = l.target === window ? 'window'
         : l.target === document ? 'document'
         : (l.target as HTMLElement).tagName?.toLowerCase() || 'element';
