@@ -18,7 +18,7 @@
     "@azure/msal-node": "^5.2.2",
     "@azure/msal-node-extensions": "^5.2.0",
     "@fluentui/react-components": "^9.73.8",
-    "@fluentui/react-icons": "^2.0.258",
+    "@fluentui/react-icons": "^2.0.327",
     "commander": "^12.1.0",
     "fast-xml-parser": "^4.5.0",
     "html2canvas": "^1.4.1",
