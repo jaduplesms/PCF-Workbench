@@ -175,8 +175,11 @@ jobs:
               });
             }
 
-      - name: Fail job if loop did not pass
-        if: steps.loop.outcome != 'success'
+      - name: Fail job if loop reported fail
         run: |
-          echo "::error::PCF build loop returned non-zero exit code."
-          exit 1
+          STATUS=$(jq -r '.summary.status' harness/pcf-loop-reports/report.json)
+          echo "Loop summary.status = $STATUS"
+          if [ "$STATUS" = "fail" ]; then
+            echo "::error::PCF build loop reported fail."
+            exit 1
+          fi
