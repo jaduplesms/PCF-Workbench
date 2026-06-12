@@ -1,0 +1,24 @@
+# Files excluded from the published npm package.
+# The "files" field in package.json controls what IS included;
+# this file covers edge cases not handled by that allowlist.
+
+# Test specs and visual regression artifacts
+tests/
+__visual__/
+
+# Development scripts (gallery builder, scraper, etc.)
+scripts/
+
+# Docs and design notes
+docs/
+
+# TypeScript build info (transient)
+*.tsbuildinfo
+
+# Playwright config (only needed for local development)
+playwright.config.ts
+
+# Editor + local tooling
+.vscode/
+.env
+.env.*

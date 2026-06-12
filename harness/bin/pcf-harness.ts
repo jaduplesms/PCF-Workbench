@@ -3,58 +3,75 @@
 // CLI entry point for the PCF Dev Harness.
 //
 // Two modes:
-//   pcf-harness --path <dir>            Start the interactive harness (default).
-//   pcf-harness loop --path <dir> ...   Run one build→render→report cycle
+//   pcf-harness [path]                  Start interactive harness (default).
+//                                       If [path] has a manifest -> single control;
+//                                       otherwise -> workspace gallery mode.
+//   pcf-harness loop [path] ...         Run one build→render→report cycle
 //                                       headlessly and write a JSON report
 //                                       (the MAI AI build loop).
-// In both modes the control must have been built (`npm run build` in the PCF
+// In loop mode the control must have been built (`npm run build` in the PCF
 // project) so that out/controls/{Name}/bundle.js exists.
 
-import { Command } from 'commander';
-import { createServer } from 'vite';
-import { spawn } from 'node:child_process';
-import path from 'node:path';
-import fs from 'node:fs';
-import net from 'node:net';
-import { fileURLToPath } from 'node:url';
-import { explainError } from '../src/loader/error-diagnostics';
+import { Command } from "commander";
+import { createServer } from "vite";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import fs from "node:fs";
+import net from "node:net";
+import { fileURLToPath } from "node:url";
+import { explainError } from "../src/loader/error-diagnostics";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const harnessRoot = path.resolve(__dirname, '..');
+const harnessRoot = path.resolve(__dirname, "..");
 
 const program = new Command();
 
 program
-  .name('pcf-harness')
-  .description('PCF dev harness — interactive runner + AI build loop')
-  .version('0.2.0');
+  .name("pcf-harness")
+  .description("PCF dev harness — interactive runner + AI build loop")
+  .version("0.2.0");
 
 /* ---------------------------------------------------------------- */
 /* Default: start the interactive harness.                          */
 /* ---------------------------------------------------------------- */
 program
-  .command('start', { isDefault: true })
-  .description('Start the interactive harness (default).')
-  .requiredOption('--path <dir>', 'Path to the PCF control directory (containing ControlManifest.Input.xml)')
-  .option('--port <number>', 'Port to run the dev server on', '8181')
-  .option('--no-open', 'Do not open the browser automatically')
-  .option('--no-watch', 'Do not auto-spawn the build watcher (M9)')
-  .action(async (opts) => {
-    const controlPath = path.resolve(opts.path);
-    assertControlDir(controlPath);
+  .command("start", { isDefault: true })
+  .description("Start the interactive harness (default).")
+  .argument(
+    "[path]",
+    "Control directory or workspace root (defaults to current directory)",
+  )
+  .option(
+    "--path <dir>",
+    "Control directory or workspace root (defaults to current directory)",
+  )
+  .option("--port <number>", "Port to run the dev server on", "8181")
+  .option("--no-open", "Do not open the browser automatically")
+  .option("--no-watch", "Do not auto-spawn the build watcher (M9)")
+  .action(async (pathArg, opts) => {
+    const target = resolveStartTarget(pathArg, opts.path);
 
-    process.env.PCF_CONTROL_PATH = controlPath;
+    if (target.mode === "control") {
+      process.env.PCF_CONTROL_PATH = target.path;
+      delete process.env.PCF_WORKSPACE_ROOT;
+    } else {
+      process.env.PCF_WORKSPACE_ROOT = target.path;
+      delete process.env.PCF_CONTROL_PATH;
+    }
     if (opts.watch === false) {
-      process.env.PCF_NO_WATCH = '1';
+      process.env.PCF_NO_WATCH = "1";
     }
 
     console.log(`\n  PCF Dev Harness`);
-    console.log(`  Control: ${controlPath}`);
+    console.log(
+      `  Mode:    ${target.mode === "control" ? "single-control" : "workspace-gallery"}`,
+    );
+    console.log(`  Path:    ${target.path}`);
     console.log(`  Port:    ${opts.port}\n`);
 
     try {
       const server = await createServer({
-        configFile: path.join(harnessRoot, 'vite.config.ts'),
+        configFile: path.join(harnessRoot, "vite.config.ts"),
         root: harnessRoot,
         server: {
           port: parseInt(opts.port, 10),
@@ -64,9 +81,9 @@ program
 
       await server.listen();
       server.printUrls();
-      console.log('\n  Press Ctrl+C to stop.\n');
+      console.log("\n  Press Ctrl+C to stop.\n");
     } catch (err: any) {
-      console.error('Failed to start harness:', err.message);
+      console.error("Failed to start harness:", err.message);
       process.exit(1);
     }
   });
@@ -75,17 +92,34 @@ program
 /* `loop` subcommand — one headless build→render→report cycle.       */
 /* ---------------------------------------------------------------- */
 program
-  .command('loop')
-  .description('Run one build→render→report cycle and emit a JSON report.')
-  .requiredOption('--path <dir>', 'Path to the PCF control directory')
-  .option('--out <dir>', 'Directory to write report.json + screenshot.png', './pcf-loop-reports')
-  .option('--skip-build', 'Skip the npm run build step (use existing out/ bundle)', false)
-  .option('--timeout <ms>', 'Max ms to wait for the control to render', '60000')
-  .option('--headed', 'Run Playwright in headed mode for debugging', false)
-  .option('--scenario <name>', 'Load this saved test scenario before rendering (must exist in test-scenarios.json). Default: render with manifest defaults.')
-  .action(async (opts) => {
-    const controlPath = path.resolve(opts.path);
-    assertControlDir(controlPath);
+  .command("loop")
+  .description("Run one build→render→report cycle and emit a JSON report.")
+  .argument(
+    "[path]",
+    "Path to the PCF control directory (defaults to current directory)",
+  )
+  .option(
+    "--path <dir>",
+    "Path to the PCF control directory (defaults to current directory)",
+  )
+  .option(
+    "--out <dir>",
+    "Directory to write report.json + screenshot.png",
+    "./pcf-loop-reports",
+  )
+  .option(
+    "--skip-build",
+    "Skip the npm run build step (use existing out/ bundle)",
+    false,
+  )
+  .option("--timeout <ms>", "Max ms to wait for the control to render", "60000")
+  .option("--headed", "Run Playwright in headed mode for debugging", false)
+  .option(
+    "--scenario <name>",
+    "Load this saved test scenario before rendering (must exist in test-scenarios.json). Default: render with manifest defaults.",
+  )
+  .action(async (pathArg, opts) => {
+    const controlPath = resolveLoopControlPath(pathArg, opts.path);
     const outDir = path.resolve(opts.out);
     fs.mkdirSync(outDir, { recursive: true });
 
@@ -110,12 +144,12 @@ program.parse();
 
 /** Supported metrics for perfBudget. Keep in sync with schema + docs. */
 const BUDGET_METRICS = [
-  'firstUpdateViewMs',
-  'avgRenderTimeMs',
-  'lastRenderTimeMs',
-  'renderCount',
-  'leaks',
-  'unimplementedCount',
+  "firstUpdateViewMs",
+  "avgRenderTimeMs",
+  "lastRenderTimeMs",
+  "renderCount",
+  "leaks",
+  "unimplementedCount",
 ] as const;
 type BudgetMetric = (typeof BUDGET_METRICS)[number];
 
@@ -129,11 +163,11 @@ interface BudgetViolation {
   actual: number;
   budget: number;
   delta: number;
-  severity: 'warn' | 'fail';
+  severity: "warn" | "fail";
 }
 
 interface BudgetReport {
-  status: 'pass' | 'warn' | 'fail';
+  status: "pass" | "warn" | "fail";
   source: string | null;
   budget: PerfBudget;
   violations: BudgetViolation[];
@@ -141,58 +175,73 @@ interface BudgetReport {
 
 /** Walks the same order the Vite plugin uses (control dir, then project
  * root) and returns the first `data.json` it finds. */
-function locateDataJson(controlPath: string, projectRoot: string): string | null {
+function locateDataJson(
+  controlPath: string,
+  projectRoot: string,
+): string | null {
   for (const candidate of [
-    path.join(controlPath, 'data.json'),
-    path.join(projectRoot, 'data.json'),
+    path.join(controlPath, "data.json"),
+    path.join(projectRoot, "data.json"),
   ]) {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
 }
 
-function loadPerfBudget(controlPath: string, projectRoot: string):
-  { budget: PerfBudget; source: string | null } {
+function loadPerfBudget(
+  controlPath: string,
+  projectRoot: string,
+): { budget: PerfBudget; source: string | null } {
   const file = locateDataJson(controlPath, projectRoot);
   if (!file) return { budget: {}, source: null };
   try {
-    const raw = fs.readFileSync(file, 'utf-8');
+    const raw = fs.readFileSync(file, "utf-8");
     const json = JSON.parse(raw);
     const budget = json?.perfBudget ?? {};
-    if (typeof budget !== 'object' || Array.isArray(budget)) return { budget: {}, source: file };
+    if (typeof budget !== "object" || Array.isArray(budget))
+      return { budget: {}, source: file };
     return { budget, source: file };
   } catch {
     return { budget: {}, source: file };
   }
 }
 
-function actualForMetric(metric: BudgetMetric, harnessReport: any): number | null {
+function actualForMetric(
+  metric: BudgetMetric,
+  harnessReport: any,
+): number | null {
   if (!harnessReport) return null;
   switch (metric) {
-    case 'firstUpdateViewMs':
+    case "firstUpdateViewMs":
       return harnessReport.lifecycle?.firstUpdateViewMs ?? null;
-    case 'avgRenderTimeMs':
+    case "avgRenderTimeMs":
       return harnessReport.performance?.avgRenderTimeMs ?? null;
-    case 'lastRenderTimeMs':
+    case "lastRenderTimeMs":
       return harnessReport.performance?.lastRenderTimeMs ?? null;
-    case 'renderCount':
+    case "renderCount":
       return harnessReport.performance?.renderCount ?? null;
-    case 'leaks':
-      return Array.isArray(harnessReport.leaks) ? harnessReport.leaks.length : null;
-    case 'unimplementedCount':
+    case "leaks":
+      return Array.isArray(harnessReport.leaks)
+        ? harnessReport.leaks.length
+        : null;
+    case "unimplementedCount":
       return harnessReport.logs?.unimplementedCount ?? null;
   }
 }
 
 function normaliseLimit(limit: BudgetLimit): { warn?: number; fail?: number } {
-  if (typeof limit === 'number') return { fail: limit };
+  if (typeof limit === "number") return { fail: limit };
   return {
-    warn: typeof limit?.warn === 'number' ? limit.warn : undefined,
-    fail: typeof limit?.fail === 'number' ? limit.fail : undefined,
+    warn: typeof limit?.warn === "number" ? limit.warn : undefined,
+    fail: typeof limit?.fail === "number" ? limit.fail : undefined,
   };
 }
 
-function evaluateBudget(harnessReport: any, budget: PerfBudget, source: string | null): BudgetReport {
+function evaluateBudget(
+  harnessReport: any,
+  budget: PerfBudget,
+  source: string | null,
+): BudgetReport {
   const violations: BudgetViolation[] = [];
   for (const metric of BUDGET_METRICS) {
     if (!(metric in budget)) continue;
@@ -201,27 +250,87 @@ function evaluateBudget(harnessReport: any, budget: PerfBudget, source: string |
     const { warn, fail } = normaliseLimit(raw as BudgetLimit);
     const actual = actualForMetric(metric, harnessReport);
     if (actual === null) continue;
-    if (typeof fail === 'number' && actual > fail) {
-      violations.push({ metric, actual, budget: fail, delta: actual - fail, severity: 'fail' });
-    } else if (typeof warn === 'number' && actual > warn) {
-      violations.push({ metric, actual, budget: warn, delta: actual - warn, severity: 'warn' });
+    if (typeof fail === "number" && actual > fail) {
+      violations.push({
+        metric,
+        actual,
+        budget: fail,
+        delta: actual - fail,
+        severity: "fail",
+      });
+    } else if (typeof warn === "number" && actual > warn) {
+      violations.push({
+        metric,
+        actual,
+        budget: warn,
+        delta: actual - warn,
+        severity: "warn",
+      });
     }
   }
-  const status: 'pass' | 'warn' | 'fail' = violations.some(v => v.severity === 'fail')
-    ? 'fail'
-    : violations.some(v => v.severity === 'warn') ? 'warn' : 'pass';
+  const status: "pass" | "warn" | "fail" = violations.some(
+    (v) => v.severity === "fail",
+  )
+    ? "fail"
+    : violations.some((v) => v.severity === "warn")
+      ? "warn"
+      : "pass";
   return { status, source, budget, violations };
 }
 
 /* ---------------------------------------------------------------- */
 
 function assertControlDir(controlPath: string): void {
-  const manifestPath = path.join(controlPath, 'ControlManifest.Input.xml');
+  const manifestPath = path.join(controlPath, "ControlManifest.Input.xml");
   if (!fs.existsSync(manifestPath)) {
-    console.error(`\n  Error: ControlManifest.Input.xml not found at:\n  ${manifestPath}\n`);
-    console.error(`  Make sure --path points to the directory containing ControlManifest.Input.xml.\n`);
+    console.error(
+      `\n  Error: ControlManifest.Input.xml not found at:\n  ${manifestPath}\n`,
+    );
+    console.error(
+      `  Make sure --path points to the directory containing ControlManifest.Input.xml.\n`,
+    );
     process.exit(1);
   }
+}
+
+function hasControlManifest(dirPath: string): boolean {
+  return (
+    fs.existsSync(path.join(dirPath, "ControlManifest.Input.xml")) ||
+    fs.existsSync(path.join(dirPath, "ControlManifest.xml"))
+  );
+}
+
+function resolveCliPath(pathArg?: string, optionPath?: string): string {
+  const raw = pathArg ?? optionPath ?? process.cwd();
+  return path.resolve(raw);
+}
+
+function resolveStartTarget(
+  pathArg?: string,
+  optionPath?: string,
+): { mode: "control" | "workspace"; path: string } {
+  const resolvedPath = resolveCliPath(pathArg, optionPath);
+
+  if (
+    !fs.existsSync(resolvedPath) ||
+    !fs.statSync(resolvedPath).isDirectory()
+  ) {
+    console.error(`\n  Error: directory not found:\n  ${resolvedPath}\n`);
+    process.exit(1);
+  }
+
+  if (hasControlManifest(resolvedPath)) {
+    assertControlDir(resolvedPath);
+    return { mode: "control", path: resolvedPath };
+  }
+
+  return { mode: "workspace", path: resolvedPath };
+}
+
+function resolveLoopControlPath(pathArg?: string, optionPath?: string): string {
+  const resolvedPath = resolveCliPath(pathArg, optionPath);
+  assertControlDir(resolvedPath);
+  return resolvedPath;
 }
 
 interface LoopOpts {
@@ -250,16 +359,20 @@ async function runLoop(opts: LoopOpts): Promise<number> {
   /* --- 1. Build ------------------------------------------------- */
   let build: BuildResult;
   if (opts.skipBuild) {
-    build = { ok: true, durationMs: 0, stdout: '', stderr: '', errors: [] };
-    console.log('  [build] skipped (--skip-build)');
+    build = { ok: true, durationMs: 0, stdout: "", stderr: "", errors: [] };
+    console.log("  [build] skipped (--skip-build)");
   } else {
-    console.log('  [build] npm run build …');
+    console.log("  [build] npm run build …");
     build = await runBuild(findProjectRoot(opts.controlPath));
-    console.log(`  [build] ${build.ok ? 'ok' : 'FAIL'} (${build.durationMs} ms)`);
+    console.log(
+      `  [build] ${build.ok ? "ok" : "FAIL"} (${build.durationMs} ms)`,
+    );
     if (!build.ok) {
-      const report = emptyReport(opts, build, 'build_failed');
+      const report = emptyReport(opts, build, "build_failed");
       writeReport(opts.outDir, report);
-      console.error(`\n  Build failed. Report: ${path.join(opts.outDir, 'report.json')}\n`);
+      console.error(
+        `\n  Build failed. Report: ${path.join(opts.outDir, "report.json")}\n`,
+      );
       return 1;
     }
   }
@@ -269,22 +382,26 @@ async function runLoop(opts: LoopOpts): Promise<number> {
   process.env.PCF_CONTROL_PATH = opts.controlPath;
   console.log(`  [vite] starting on port ${port} …`);
   const server = await createServer({
-    configFile: path.join(harnessRoot, 'vite.config.ts'),
+    configFile: path.join(harnessRoot, "vite.config.ts"),
     root: harnessRoot,
-    server: { port, host: '127.0.0.1', open: false },
-    logLevel: 'warn',
+    server: { port, host: "127.0.0.1", open: false },
+    logLevel: "warn",
   });
   await server.listen();
-  const url = `http://127.0.0.1:${port}/?chrome=none${opts.scenario ? `&scenario=${encodeURIComponent(opts.scenario)}` : ''}`;
+  const url = `http://127.0.0.1:${port}/?chrome=none${opts.scenario ? `&scenario=${encodeURIComponent(opts.scenario)}` : ""}`;
   if (opts.scenario) {
-    console.log(`  [scenario] requesting "${opts.scenario}" via ?scenario= URL param`);
+    console.log(
+      `  [scenario] requesting "${opts.scenario}" via ?scenario= URL param`,
+    );
   }
 
   /* --- 3. Playwright drive -------------------------------------- */
   // Lazy-import to keep `pcf-harness --path` startup fast.
-  const { chromium } = await import('@playwright/test');
+  const { chromium } = await import("@playwright/test");
   const browser = await chromium.launch({ headless: !opts.headed });
-  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
   const page = await context.newPage();
 
   // Suppress the first-load auto-generate scenarios dialog — its backdrop
@@ -295,22 +412,28 @@ async function runLoop(opts: LoopOpts): Promise<number> {
   // scenario or persisted localStorage carries `dataSource: 'live'`.
   await page.addInitScript(() => {
     try {
-      localStorage.setItem('pcf-workbench-suppress-autogen-all', '1');
-    } catch { /* localStorage may be unavailable — silent */ }
+      localStorage.setItem("pcf-workbench-suppress-autogen-all", "1");
+    } catch {
+      /* localStorage may be unavailable — silent */
+    }
     try {
-      (window as unknown as { __PCF_WORKBENCH_BLOCK_LIVE__?: boolean }).__PCF_WORKBENCH_BLOCK_LIVE__ = true;
-    } catch { /* ignore */ }
+      (
+        window as unknown as { __PCF_WORKBENCH_BLOCK_LIVE__?: boolean }
+      ).__PCF_WORKBENCH_BLOCK_LIVE__ = true;
+    } catch {
+      /* ignore */
+    }
   });
 
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   const pageErrorStacks: (string | undefined)[] = [];
-  page.on('pageerror', (err) => {
+  page.on("pageerror", (err) => {
     pageErrors.push(err.message);
     pageErrorStacks.push(err.stack);
   });
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  page.on("console", (msg) => {
+    if (msg.type() === "error") consoleErrors.push(msg.text());
   });
 
   let renderOk = false;
@@ -323,17 +446,23 @@ async function runLoop(opts: LoopOpts): Promise<number> {
     // keeps an open connection forever, so the page is never network-idle in
     // dev. The real readiness signal is the test-bridge's __pcfwbHarnessReady
     // flag below.
-    await page.goto(url, { waitUntil: 'load', timeout: opts.timeoutMs });
+    await page.goto(url, { waitUntil: "load", timeout: opts.timeoutMs });
     // Wait for control to render (test-bridge sets __pcfwbHarnessReady on first
     // successful updateView).
-    await page.waitForFunction(() => (window as any).__pcfwbHarnessReady === true, undefined, {
-      timeout: opts.timeoutMs,
-    });
+    await page.waitForFunction(
+      () => (window as any).__pcfwbHarnessReady === true,
+      undefined,
+      {
+        timeout: opts.timeoutMs,
+      },
+    );
     renderOk = true;
 
-    harnessReport = await page.evaluate(() => (window as any).__pcfwbHarnessReport?.() ?? null);
+    harnessReport = await page.evaluate(
+      () => (window as any).__pcfwbHarnessReport?.() ?? null,
+    );
     await page.screenshot({
-      path: path.join(opts.outDir, 'screenshot.png'),
+      path: path.join(opts.outDir, "screenshot.png"),
       fullPage: true,
     });
 
@@ -355,10 +484,12 @@ async function runLoop(opts: LoopOpts): Promise<number> {
     // Best-effort screenshot for diagnostics.
     try {
       await page.screenshot({
-        path: path.join(opts.outDir, 'screenshot.png'),
+        path: path.join(opts.outDir, "screenshot.png"),
         fullPage: true,
       });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     // Even on render failure, try to harvest leak info — the host may have
     // mounted before the crash.
     try {
@@ -371,7 +502,9 @@ async function runLoop(opts: LoopOpts): Promise<number> {
           () => (window as any).__pcfwbHarnessReport?.() ?? null,
         );
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   } finally {
     await browser.close().catch(() => {});
     await server.close().catch(() => {});
@@ -380,11 +513,14 @@ async function runLoop(opts: LoopOpts): Promise<number> {
   /* --- 4. Report ------------------------------------------------ */
   const totalMs = Date.now() - t0;
   const projectRoot = findProjectRoot(opts.controlPath);
-  const { budget: budgetConfig, source: budgetSource } =
-    loadPerfBudget(opts.controlPath, projectRoot);
-  const budget = Object.keys(budgetConfig).length > 0
-    ? evaluateBudget(harnessReport, budgetConfig, budgetSource)
-    : null;
+  const { budget: budgetConfig, source: budgetSource } = loadPerfBudget(
+    opts.controlPath,
+    projectRoot,
+  );
+  const budget =
+    Object.keys(budgetConfig).length > 0
+      ? evaluateBudget(harnessReport, budgetConfig, budgetSource)
+      : null;
 
   const report = {
     schemaVersion: 1,
@@ -406,9 +542,14 @@ async function runLoop(opts: LoopOpts): Promise<number> {
       error: renderError,
       consoleErrors,
       pageErrors,
-      diagnostics: buildDiagnostics(consoleErrors, pageErrors, pageErrorStacks, renderError),
+      diagnostics: buildDiagnostics(
+        consoleErrors,
+        pageErrors,
+        pageErrorStacks,
+        renderError,
+      ),
       report: harnessReport,
-      screenshot: 'screenshot.png',
+      screenshot: "screenshot.png",
     },
     budget,
     summary: summarize({
@@ -422,11 +563,14 @@ async function runLoop(opts: LoopOpts): Promise<number> {
   };
   writeReport(opts.outDir, report);
 
-  console.log(`\n  [summary] ${report.summary.status.toUpperCase()} — ${report.summary.headline}`);
+  console.log(
+    `\n  [summary] ${report.summary.status.toUpperCase()} — ${report.summary.headline}`,
+  );
   if (budget) {
-    const summary = budget.violations.length === 0
-      ? 'all metrics within budget'
-      : `${budget.violations.length} violation(s): ${budget.violations.map(v => `${v.metric} ${v.severity}`).join(', ')}`;
+    const summary =
+      budget.violations.length === 0
+        ? "all metrics within budget"
+        : `${budget.violations.length} violation(s): ${budget.violations.map((v) => `${v.metric} ${v.severity}`).join(", ")}`;
     console.log(`  [budget]  ${budget.status.toUpperCase()} — ${summary}`);
   }
   const diags = report.harness.diagnostics as ErrorDiagnostic[] | undefined;
@@ -437,9 +581,9 @@ async function runLoop(opts: LoopOpts): Promise<number> {
       console.log(`            fix:   ${d.suggestedFix}`);
     }
   }
-  console.log(`  [report]  ${path.join(opts.outDir, 'report.json')}\n`);
+  console.log(`  [report]  ${path.join(opts.outDir, "report.json")}\n`);
 
-  return report.summary.status === 'pass' ? 0 : 1;
+  return report.summary.status === "pass" ? 0 : 1;
 }
 
 /* ---------------------------------------------------------------- */
@@ -449,7 +593,7 @@ function findProjectRoot(controlPath: string): string {
   // the parent. Walk up until we find package.json.
   let dir = controlPath;
   for (let i = 0; i < 4; i++) {
-    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    if (fs.existsSync(path.join(dir, "package.json"))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -460,28 +604,38 @@ function findProjectRoot(controlPath: string): string {
 function runBuild(projectRoot: string): Promise<BuildResult> {
   const t0 = Date.now();
   return new Promise((resolve) => {
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const child = spawn(npm, ['run', 'build'], {
+    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+    const child = spawn(npm, ["run", "build"], {
       cwd: projectRoot,
-      shell: process.platform === 'win32',
+      shell: process.platform === "win32",
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => { stdout += d.toString(); });
-    child.stderr.on('data', (d) => { stderr += d.toString(); });
-    child.on('close', (code) => {
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    child.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    child.on("close", (code) => {
       const ok = code === 0;
       const errors: string[] = [];
       if (!ok) {
         // Extract TS / pcf-scripts error lines for the report.
-        const combined = stdout + '\n' + stderr;
-        const errLines = combined.split(/\r?\n/).filter(l =>
-          /\berror\b/i.test(l) || /\bfailed\b/i.test(l) || /TS\d{4,}/.test(l));
+        const combined = stdout + "\n" + stderr;
+        const errLines = combined
+          .split(/\r?\n/)
+          .filter(
+            (l) =>
+              /\berror\b/i.test(l) ||
+              /\bfailed\b/i.test(l) ||
+              /TS\d{4,}/.test(l),
+          );
         errors.push(...errLines.slice(0, 30));
       }
       resolve({ ok, durationMs: Date.now() - t0, stdout, stderr, errors });
     });
-    child.on('error', (err) => {
+    child.on("error", (err) => {
       resolve({
         ok: false,
         durationMs: Date.now() - t0,
@@ -497,13 +651,13 @@ function findFreePort(preferred: number): Promise<number> {
   return new Promise((resolve) => {
     const tryPort = (p: number) => {
       const srv = net.createServer();
-      srv.once('error', () => tryPort(p + 1));
-      srv.once('listening', () => {
+      srv.once("error", () => tryPort(p + 1));
+      srv.once("listening", () => {
         const addr = srv.address();
-        const port = typeof addr === 'object' && addr ? addr.port : p;
+        const port = typeof addr === "object" && addr ? addr.port : p;
         srv.close(() => resolve(port));
       });
-      srv.listen(p, '127.0.0.1');
+      srv.listen(p, "127.0.0.1");
     };
     tryPort(preferred);
   });
@@ -511,19 +665,19 @@ function findFreePort(preferred: number): Promise<number> {
 
 function writeReport(outDir: string, report: any): void {
   fs.writeFileSync(
-    path.join(outDir, 'report.json'),
+    path.join(outDir, "report.json"),
     JSON.stringify(report, null, 2),
   );
 }
 
 interface ErrorDiagnostic {
-  source: 'pageError' | 'consoleError' | 'renderError';
+  source: "pageError" | "consoleError" | "renderError";
   message: string;
   ruleId: string;
   summary: string;
   likelyCause: string;
   suggestedFix: string;
-  severity: 'fatal' | 'warning' | 'info';
+  severity: "fatal" | "warning" | "info";
 }
 
 function buildDiagnostics(
@@ -534,7 +688,11 @@ function buildDiagnostics(
 ): ErrorDiagnostic[] {
   const out: ErrorDiagnostic[] = [];
   const seen = new Set<string>();
-  const push = (source: ErrorDiagnostic['source'], msg: string, stack?: string) => {
+  const push = (
+    source: ErrorDiagnostic["source"],
+    msg: string,
+    stack?: string,
+  ) => {
     const exp = explainError(msg, stack);
     if (!exp) return;
     const key = `${source}:${exp.ruleId}`;
@@ -542,12 +700,13 @@ function buildDiagnostics(
     seen.add(key);
     out.push({ source, message: msg, ...exp });
   };
-  for (let i = 0; i < pageErrors.length; i++) push('pageError', pageErrors[i], pageErrorStacks[i]);
+  for (let i = 0; i < pageErrors.length; i++)
+    push("pageError", pageErrors[i], pageErrorStacks[i]);
   // Console error text from page.on('console') often includes the stack already
   // (Chrome formats `TypeError: foo\n    at bar (file:1:2)\n    ...` as one string),
   // so passing the message as both arg gives stack-aware rules a chance to match.
-  for (const m of consoleErrors) push('consoleError', m, m);
-  if (renderError) push('renderError', renderError);
+  for (const m of consoleErrors) push("consoleError", m, m);
+  if (renderError) push("renderError", renderError);
   return out;
 }
 
@@ -558,10 +717,28 @@ function emptyReport(opts: LoopOpts, build: BuildResult, reason: string) {
     capturedAt: new Date().toISOString(),
     durationMs: build.durationMs,
     control: { path: opts.controlPath },
-    build: { ok: build.ok, skipped: opts.skipBuild, durationMs: build.durationMs, errors: build.errors },
-    harness: { url: null, ok: false, error: null, consoleErrors: [], pageErrors: [], report: null, screenshot: null },
+    build: {
+      ok: build.ok,
+      skipped: opts.skipBuild,
+      durationMs: build.durationMs,
+      errors: build.errors,
+    },
+    harness: {
+      url: null,
+      ok: false,
+      error: null,
+      consoleErrors: [],
+      pageErrors: [],
+      report: null,
+      screenshot: null,
+    },
     budget: null,
-    summary: { status: 'fail', headline: reason, errors: build.errors.length, leaks: 0 },
+    summary: {
+      status: "fail",
+      headline: reason,
+      errors: build.errors.length,
+      leaks: 0,
+    },
   };
 }
 
@@ -574,22 +751,63 @@ interface SummaryInput {
   budget: BudgetReport | null;
 }
 
-function summarize(s: SummaryInput): { status: 'pass' | 'warn' | 'fail'; headline: string; errors: number; leaks: number } {
-  const leaks = Array.isArray(s.harnessReport?.leaks) ? s.harnessReport.leaks.length : 0;
-  if (!s.buildOk) return { status: 'fail', headline: 'build failed', errors: 0, leaks: 0 };
-  if (!s.renderOk) return { status: 'fail', headline: 'control did not render', errors: s.pageErrors.length + s.consoleErrors.length, leaks };
+function summarize(s: SummaryInput): {
+  status: "pass" | "warn" | "fail";
+  headline: string;
+  errors: number;
+  leaks: number;
+} {
+  const leaks = Array.isArray(s.harnessReport?.leaks)
+    ? s.harnessReport.leaks.length
+    : 0;
+  if (!s.buildOk)
+    return { status: "fail", headline: "build failed", errors: 0, leaks: 0 };
+  if (!s.renderOk)
+    return {
+      status: "fail",
+      headline: "control did not render",
+      errors: s.pageErrors.length + s.consoleErrors.length,
+      leaks,
+    };
   const errs = s.pageErrors.length + s.consoleErrors.length;
-  if (errs > 0) return { status: 'fail', headline: `${errs} console/page error(s)`, errors: errs, leaks };
+  if (errs > 0)
+    return {
+      status: "fail",
+      headline: `${errs} console/page error(s)`,
+      errors: errs,
+      leaks,
+    };
   // Budget violations escalate before resource leaks because they're configured
   // expectations, while leaks are an absolute floor.
-  if (s.budget?.status === 'fail') {
-    const failed = s.budget.violations.filter(v => v.severity === 'fail');
-    return { status: 'fail', headline: `perf budget exceeded: ${failed.map(v => v.metric).join(', ')}`, errors: 0, leaks };
+  if (s.budget?.status === "fail") {
+    const failed = s.budget.violations.filter((v) => v.severity === "fail");
+    return {
+      status: "fail",
+      headline: `perf budget exceeded: ${failed.map((v) => v.metric).join(", ")}`,
+      errors: 0,
+      leaks,
+    };
   }
-  if (leaks > 0) return { status: 'warn', headline: `${leaks} resource leak(s)`, errors: 0, leaks };
-  if (s.budget?.status === 'warn') {
-    const warned = s.budget.violations.filter(v => v.severity === 'warn');
-    return { status: 'warn', headline: `perf budget soft-warn: ${warned.map(v => v.metric).join(', ')}`, errors: 0, leaks };
+  if (leaks > 0)
+    return {
+      status: "warn",
+      headline: `${leaks} resource leak(s)`,
+      errors: 0,
+      leaks,
+    };
+  if (s.budget?.status === "warn") {
+    const warned = s.budget.violations.filter((v) => v.severity === "warn");
+    return {
+      status: "warn",
+      headline: `perf budget soft-warn: ${warned.map((v) => v.metric).join(", ")}`,
+      errors: 0,
+      leaks,
+    };
   }
-  return { status: 'pass', headline: 'control rendered cleanly', errors: 0, leaks };
+  return {
+    status: "pass",
+    headline: "control rendered cleanly",
+    errors: 0,
+    leaks,
+  };
 }

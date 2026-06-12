@@ -15,19 +15,19 @@ An enhanced development harness and testing framework for Power Apps Component F
 
 The built-in `pcf-scripts start` test harness is minimal: a single control, no device emulation, no network simulation, and limited debugging tools. PCF Workbench replaces it with a full-featured development environment:
 
-| Feature | pcf-scripts start | PCF Workbench |
-|---|---|---|
-| Gallery of all controls | No | Yes |
-| Device emulation | No | 4 presets + responsive |
-| Network conditioning | No | Offline, 3G, custom latency |
-| WebAPI mock with OData filters | No | Yes |
-| Performance monitoring | No | Render timeline, DOM, WebAPI log |
-| Resource leak detection | No | Event listeners, timers, observers |
-| Test scenarios | No | Save, load, export, import, auto-generate |
-| Dark mode toggle | No | Yes |
-| Thumbnail capture | No | Auto-capture to gallery |
-| Virtual (React) control support | Basic | Full lifecycle with stable rendering |
-| Hot reload | No | Vite file watcher on bundle |
+| Feature                         | pcf-scripts start | PCF Workbench                             |
+| ------------------------------- | ----------------- | ----------------------------------------- |
+| Gallery of all controls         | No                | Yes                                       |
+| Device emulation                | No                | 4 presets + responsive                    |
+| Network conditioning            | No                | Offline, 3G, custom latency               |
+| WebAPI mock with OData filters  | No                | Yes                                       |
+| Performance monitoring          | No                | Render timeline, DOM, WebAPI log          |
+| Resource leak detection         | No                | Event listeners, timers, observers        |
+| Test scenarios                  | No                | Save, load, export, import, auto-generate |
+| Dark mode toggle                | No                | Yes                                       |
+| Thumbnail capture               | No                | Auto-capture to gallery                   |
+| Virtual (React) control support | Basic             | Full lifecycle with stable rendering      |
+| Hot reload                      | No                | Vite file watcher on bundle               |
 
 ---
 
@@ -41,12 +41,12 @@ Browse all PCF controls in your workspace from a searchable gallery. Each card s
 
 Test your controls at real device dimensions with four built-in presets:
 
-| Preset | Resolution | Form Factor |
-|---|---|---|
-| Desktop | 1280 x 720 | Desktop |
-| iPhone 14 Pro | 390 x 844 | Phone |
-| Pixel 7 | 412 x 915 | Phone |
-| iPad | 820 x 1180 | Tablet |
+| Preset        | Resolution | Form Factor |
+| ------------- | ---------- | ----------- |
+| Desktop       | 1280 x 720 | Desktop     |
+| iPhone 14 Pro | 390 x 844  | Phone       |
+| Pixel 7       | 412 x 915  | Phone       |
+| iPad          | 820 x 1180 | Tablet      |
 
 The viewport is a CSS container query context (`@container pcf-viewport`), so `@media` width queries in your control CSS are automatically converted to `@container` queries for accurate responsive behavior at the emulated size rather than the browser window size.
 
@@ -161,10 +161,10 @@ Gallery cards display the total `out/` directory size for each built control, wi
 
 PCF Workbench ships two [GitHub Copilot CLI](https://github.com/github/copilot-cli) **skills** that turn the harness into an end-to-end AI dev loop — not just a tester. Clone the repo and the skills auto-load whenever you run `copilot` from inside it.
 
-| Skill | What it does | Triggers on |
-|---|---|---|
-| **`pcf-engineer`** | Senior PCF authoring/review/debug. Knows the official Microsoft Learn API surface, manifest gotchas, virtual-control patterns, accessibility, Field Service Mobile / offline limits, 30+ antipatterns, and `isAuthoringMode` design-time UX. | "PCF", "ControlManifest", "code component", "virtual control", "updateView" |
-| **`pcf-workbench`** | Operates this harness — gallery launch, single-control loop, device/network emulation, scenario authoring, build→render→report iteration, leak triage. | "PCF Workbench", "harness", "run pcf locally", "pcf gallery", "debug pcf control" |
+| Skill               | What it does                                                                                                                                                                                                                                 | Triggers on                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **`pcf-engineer`**  | Senior PCF authoring/review/debug. Knows the official Microsoft Learn API surface, manifest gotchas, virtual-control patterns, accessibility, Field Service Mobile / offline limits, 30+ antipatterns, and `isAuthoringMode` design-time UX. | "PCF", "ControlManifest", "code component", "virtual control", "updateView"       |
+| **`pcf-workbench`** | Operates this harness — gallery launch, single-control loop, device/network emulation, scenario authoring, build→render→report iteration, leak triage.                                                                                       | "PCF Workbench", "harness", "run pcf locally", "pcf gallery", "debug pcf control" |
 
 Both skills live in [`.copilot/skills/`](./.copilot/skills/). Use them together: `pcf-engineer` writes/reviews the code, `pcf-workbench` runs and validates it. See [`BUILDING.md`](./BUILDING.md) for the full AI-first workflow (requirement → `pac pcf init` → AI codegen → harness loop → ship).
 
@@ -199,19 +199,67 @@ npm install
 
 > **No build step required.** Vite compiles TypeScript on-the-fly — just install and run.
 
+### Start with the CLI (recommended)
+
+From `harness/`, run:
+
+```bash
+npx tsx bin/pcf-harness.ts
+```
+
+By default, it uses your current folder as the path:
+
+- If the folder contains `ControlManifest.Input.xml` (or `ControlManifest.xml`), it starts in **single-control mode**.
+- Otherwise, it starts in **workspace gallery mode**.
+
+You can also pass an explicit path:
+
+```bash
+# Workspace gallery mode
+npx tsx bin/pcf-harness.ts start /path/to/your/pcf-controls
+
+# Single-control mode
+npx tsx bin/pcf-harness.ts start /path/to/MyControl/MyControl
+```
+
+You can use `--path` instead of a positional argument if you prefer:
+
+```bash
+npx tsx bin/pcf-harness.ts start --path /path/to/your/pcf-controls
+```
+
+### Run from any folder (optional)
+
+Link once, then run globally:
+
+```bash
+cd PCF-Workbench/harness
+npm link
+
+# then from any folder
+pcf-harness
+pcf-harness start /path/to/your/pcf-controls
+```
+
+### Legacy env-var mode
+
+The direct `npx vite` mode still works.
+
 ### Gallery Mode
 
 Browse all controls in a workspace directory:
 
 **Bash / Git Bash:**
+
 ```bash
 cd PCF-Workbench/harness
 PCF_WORKSPACE_ROOT="/path/to/your/pcf-controls" npx vite --port 8181
 ```
 
 **PowerShell:**
+
 ```powershell
-cd PCFBuilderFramework\harness
+cd PCF-Workbench\harness
 $env:PCF_WORKSPACE_ROOT = "C:\path\to\your\pcf-controls"
 npx vite --port 8181
 ```
@@ -221,14 +269,16 @@ npx vite --port 8181
 Open a specific control directly:
 
 **Bash / Git Bash:**
+
 ```bash
 cd PCF-Workbench/harness
 PCF_CONTROL_PATH="/path/to/MyControl/MyControl" npx vite --port 8181
 ```
 
 **PowerShell:**
+
 ```powershell
-cd PCFBuilderFramework\harness
+cd PCF-Workbench\harness
 $env:PCF_CONTROL_PATH = "C:\path\to\MyControl\MyControl"
 npx vite --port 8181
 ```
@@ -336,12 +386,12 @@ MyControl/
 
 ### Optional Files
 
-| File | Location | Purpose |
-|---|---|---|
-| `data.json` | Control dir or project root | Mock entity data for WebAPI and dataset shims |
-| `test-scenarios.json` | Control dir or project root | Pre-configured test scenarios |
-| `thumbnail.jpg` | Control dir or project root | Gallery card thumbnail (also `.png`, `.gif`) |
-| `.pcf-private` | Control dir or project root | Hide from gallery by default |
+| File                  | Location                    | Purpose                                       |
+| --------------------- | --------------------------- | --------------------------------------------- |
+| `data.json`           | Control dir or project root | Mock entity data for WebAPI and dataset shims |
+| `test-scenarios.json` | Control dir or project root | Pre-configured test scenarios                 |
+| `thumbnail.jpg`       | Control dir or project root | Gallery card thumbnail (also `.png`, `.gif`)  |
+| `.pcf-private`        | Control dir or project root | Hide from gallery by default                  |
 
 ### data.json Format
 
@@ -410,4 +460,5 @@ This project is licensed under the [MIT License](LICENSE).
 - This project is **not affiliated with or endorsed by Microsoft** — it is an independent development tool for the Power Apps Component Framework ecosystem
 
 ### Disclaimer
+
 This solution and code are provided as-is. This is not first-party Microsoft product or code, and should not be treated as such. Always test in a non-production environment. This solution is intended to be adjustable and extendable by end customers.
