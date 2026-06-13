@@ -23,13 +23,10 @@ import { isLiveBlocked, liveBlockReason } from '../../lib/live-block';
 const useStyles = makeStyles({
   root: {
     padding: '12px',
-    overflowX: 'hidden',
-    overflowY: 'auto',
     boxSizing: 'border-box',
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
     gap: '8px',
   },
   header: {
@@ -98,11 +95,9 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
   },
   editorArea: {
-    flex: 1,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
-    minHeight: 0,
   },
   editorHeader: {
     display: 'flex',
@@ -137,8 +132,9 @@ const useStyles = makeStyles({
     marginLeft: 'auto',
   },
   textarea: {
-    flex: 1,
-    minHeight: 0,
+    minHeight: '200px',
+    maxHeight: '400px',
+    overflowY: 'auto',
     width: '100%',
     maxWidth: '100%',
     boxSizing: 'border-box',
