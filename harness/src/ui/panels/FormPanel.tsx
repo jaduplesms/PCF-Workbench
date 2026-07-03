@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, useCallback, type ReactNode } from 'react';
 import {
-  makeStyles, mergeClasses, tokens, Input, Switch, Button, Badge, Divider, Text, Dropdown, Option,
+  makeStyles, mergeClasses, tokens, Input, Switch, Button, Badge, Text, Dropdown, Option,
 } from '@fluentui/react-components';
 import { ChevronDown16Regular, ChevronRight16Regular } from '@fluentui/react-icons';
 import {
@@ -10,19 +10,20 @@ import {
   listControls,
   listTabs,
   setAttributeValue,
-  setAttributeRequiredLevel,
   setControlVisible,
   setControlDisabled,
   setControlNotification,
   clearControlNotification,
   setTabVisible,
   setTabDisplayState,
-  fireOnChange,
   isFormDirty,
   getDirtyAttributes,
   getFormType,
-  type RequiredLevel,
+  type AttributeState,
 } from '../../store/form-store';
+import { getEntityStoreKeys, getEntityData } from '../../store/data-store';
+import { getEntityMetadata } from '../../store/metadata-store';
+import { SearchPicker, type SearchPickerItem } from '../common/SearchPicker';
 
 const useStyles = makeStyles({
   root: {
@@ -40,36 +41,48 @@ const useStyles = makeStyles({
     // horizontal scrollbar inside the side panel.
     overflowX: 'hidden',
   },
+  // Short explanatory copy shown under a section header or at the top of the
+  // panel. Muted, small, wraps.
+  intro: {
+    fontSize: '11px',
+    lineHeight: 1.45,
+    color: tokens.colorNeutralForeground3,
+  },
+  introCode: {
+    fontFamily: 'Consolas, monospace',
+    fontSize: '10px',
+    color: tokens.colorNeutralForeground2,
+  },
+  // Card section — matches the Data tab's collapsible blocks (bordered,
+  // rounded, background2 card with a normal-case semibold title). Replaces the
+  // old flat uppercase + <Divider/> treatment so both tabs feel consistent.
   section: {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
     minWidth: 0,
     width: '100%',
+    boxSizing: 'border-box',
+    padding: '8px',
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
   },
-  sectionTitle: {
-    fontWeight: 600,
-    fontSize: '12px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    color: tokens.colorNeutralForeground2,
-  },
-  // h10/UX — collapsible section header. Clickable row with chevron + title.
-  // Persists open/closed state per-section to localStorage so the user's
-  // last layout survives reload.
   collapsibleHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '8px',
     cursor: 'pointer',
     userSelect: 'none' as const,
-    padding: '2px 0',
-    borderRadius: tokens.borderRadiusSmall,
-    ':hover': { backgroundColor: tokens.colorNeutralBackground2 },
+  },
+  sectionTitle: {
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: tokens.fontSizeBase300,
+    color: tokens.colorNeutralForeground1,
   },
   collapsibleChevron: {
     flexShrink: 0,
-    color: tokens.colorNeutralForeground3,
+    color: tokens.colorNeutralForeground2,
     width: '16px',
     height: '16px',
   },
@@ -78,18 +91,17 @@ const useStyles = makeStyles({
     flexDirection: 'column' as const,
     gap: '6px',
   },
-  // All three row types share a flex-wrap layout so that when the side
-  // panel is narrow, action chips drop to the next line instead of
-  // overflowing horizontally (which previously forced a scrollbar /
-  // clipped the right-most action button at 280px widths).
-  row: {
+  // Attribute row — two lines so the field name/type and its editor + actions
+  // don't cram on a narrow panel. Rendered as an inset (background1) card on
+  // top of the section's background2 so rows are visually distinct.
+  attrRow: {
     display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '4px 6px',
+    flexDirection: 'column',
+    gap: '5px',
+    padding: '6px 8px',
     borderRadius: '4px',
-    backgroundColor: tokens.colorNeutralBackground2,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground1,
     minWidth: 0,
     width: '100%',
     boxSizing: 'border-box',
@@ -97,10 +109,11 @@ const useStyles = makeStyles({
   rowDirty: {
     borderLeft: `3px solid ${tokens.colorPaletteYellowBorderActive}`,
   },
-  attrCell: {
-    flex: '1 1 110px',
+  attrTop: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
     minWidth: 0,
-    overflow: 'hidden',
   },
   attrName: {
     fontFamily: 'Consolas, monospace',
@@ -109,30 +122,39 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     minWidth: 0,
+    flex: '1 1 auto',
   },
   attrType: {
     fontSize: '10px',
     color: tokens.colorNeutralForeground3,
   },
+  dirtyDot: {
+    flexShrink: 0,
+    fontSize: '10px',
+    color: tokens.colorPaletteYellowForeground1,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  attrBottom: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+  },
   attrInput: {
     flex: '1 1 140px',
     minWidth: 0,
-  },
-  attrRequired: {
-    flex: '0 0 auto',
-    minWidth: '88px',
-  },
-  attrFire: {
-    flex: '0 0 auto',
+    width: '100%',
   },
   controlRow: {
     display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: '8px',
-    padding: '4px 6px',
+    padding: '5px 8px',
     borderRadius: '4px',
-    backgroundColor: tokens.colorNeutralBackground2,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground1,
     minWidth: 0,
     width: '100%',
     boxSizing: 'border-box',
@@ -146,9 +168,10 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: '8px',
-    padding: '4px 6px',
+    padding: '5px 8px',
     borderRadius: '4px',
-    backgroundColor: tokens.colorNeutralBackground2,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground1,
     minWidth: 0,
     width: '100%',
     boxSizing: 'border-box',
@@ -166,6 +189,18 @@ const useStyles = makeStyles({
     display: 'flex',
     gap: '6px',
     flexWrap: 'wrap',
+  },
+  metaStrip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  metaLabel: {
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: tokens.fontSizeBase300,
+    color: tokens.colorNeutralForeground1,
+    marginRight: '2px',
   },
 });
 
@@ -202,8 +237,6 @@ function getSnapshot(): FormSnapshot {
 function useFormSnapshot(): FormSnapshot {
   return useSyncExternalStore(subscribeFormState, getSnapshot, getSnapshot);
 }
-
-const REQUIRED_LEVELS: RequiredLevel[] = ['none', 'recommended', 'required'];
 
 const FORM_TYPE_LABEL: Record<number, string> = {
   0: 'Undefined',
@@ -291,6 +324,152 @@ function CollapsibleSection({ id, title, titleTooltip, defaultCollapsed = false,
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Attribute editors — type-aware, UCI-style. Committing a value calls */
+/* setAttributeValue, which already fires onChange (form-store.ts).    */
+/* ------------------------------------------------------------------ */
+
+const NUMERIC_TYPES = new Set(['integer', 'decimal', 'money', 'double']);
+
+/** Format a stored value into a `datetime-local` input string (local time). */
+function toDateTimeLocal(v: any): string {
+  if (v == null || v === '') return '';
+  const d = v instanceof Date ? v : new Date(v);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Build a cross-table list of mock records so lookup fields become a picker
+ *  instead of a raw GUID box. We don't know a lookup's target entity (it isn't
+ *  captured on the attribute), so we search every mock table and group by it. */
+function buildLookupItems(): SearchPickerItem<{ entityType: string; id: string; name: string }>[] {
+  const items: SearchPickerItem<{ entityType: string; id: string; name: string }>[] = [];
+  for (const type of getEntityStoreKeys()) {
+    const meta = getEntityMetadata(type);
+    const idAttr = meta?.primaryIdAttribute ?? `${type}id`;
+    const nameAttr = meta?.primaryNameAttribute ?? 'name';
+    for (const rec of getEntityData(type)) {
+      const idKey = idAttr in rec
+        ? idAttr
+        : Object.keys(rec).find(k => k.toLowerCase().endsWith('id')) ?? '';
+      const id = idKey ? String(rec[idKey] ?? '') : '';
+      if (!id) continue;
+      const name = String(rec[nameAttr] ?? rec.name ?? id);
+      items.push({ value: id, text: name, secondary: `${type} · ${id}`, group: type, raw: { entityType: type, id, name } });
+    }
+  }
+  return items;
+}
+
+function LookupEditor({ attr }: { attr: AttributeState }): JSX.Element {
+  const items = buildLookupItems();
+  const currentId = attr.value == null ? '' : String(attr.value);
+  const current = items.find(i => i.value === currentId);
+  const placeholder = current ? current.text : (currentId ? currentId : 'Pick a record…');
+  return (
+    <SearchPicker
+      items={items}
+      activeValue={currentId || null}
+      placeholder={placeholder}
+      unfetchedMessage="No mock records — add tables in the Data tab."
+      onSelect={(item) => setAttributeValue(attr.name, item.value)}
+      size="small"
+      testIdPrefix={`fp-attr-${attr.name}`}
+    />
+  );
+}
+
+interface AttributeEditorProps {
+  attr: AttributeState;
+  className?: string;
+  textValue: string;
+  onTextChange: (v: string) => void;
+  onTextCommit: () => void;
+}
+
+/** Renders the right editor control for an attribute's type. */
+function AttributeEditor({ attr, className, textValue, onTextChange, onTextCommit }: AttributeEditorProps): JSX.Element {
+  const testId = `fp-attr-${attr.name}-input`;
+
+  if (attr.attributeType === 'boolean') {
+    return (
+      <Switch
+        className={className}
+        checked={!!attr.value}
+        onChange={(_, d) => setAttributeValue(attr.name, d.checked)}
+        label={attr.value ? 'true' : 'false'}
+        data-test-id={testId}
+        title="Value — toggle the boolean; onChange fires automatically"
+      />
+    );
+  }
+
+  if (attr.attributeType === 'optionset' && attr.options && attr.options.length > 0) {
+    const selected = attr.value == null ? '' : String(attr.value);
+    const selectedText = attr.options.find(o => String(o.value) === selected)?.text ?? '';
+    return (
+      <Dropdown
+        size="small"
+        className={className}
+        value={selectedText}
+        selectedOptions={[selected]}
+        placeholder="— none —"
+        onOptionSelect={(_, d) => {
+          const v = d.optionValue ?? '';
+          setAttributeValue(attr.name, v === '' ? null : Number(v));
+        }}
+        data-test-id={testId}
+        title="Value — pick an option; the friendly label is shown, the numeric value is stored"
+      >
+        <Option value="" text="— none —">— none —</Option>
+        {attr.options.map(o => (
+          <Option key={o.value} value={String(o.value)} text={o.text}>
+            {o.text} <span style={{ color: tokens.colorNeutralForeground4, fontSize: '10px' }}>({o.value})</span>
+          </Option>
+        ))}
+      </Dropdown>
+    );
+  }
+
+  if (attr.attributeType === 'lookup') {
+    return <span className={className}><LookupEditor attr={attr} /></span>;
+  }
+
+  if (attr.attributeType === 'datetime') {
+    return (
+      <Input
+        size="small"
+        type="datetime-local"
+        className={className}
+        value={toDateTimeLocal(attr.value)}
+        onChange={(_, d) => {
+          if (!d.value) { setAttributeValue(attr.name, null); return; }
+          const parsed = new Date(d.value);
+          setAttributeValue(attr.name, isNaN(parsed.getTime()) ? null : parsed);
+        }}
+        data-test-id={testId}
+        title="Value — pick a date/time; onChange fires automatically"
+      />
+    );
+  }
+
+  const isNum = NUMERIC_TYPES.has(attr.attributeType);
+  return (
+    <Input
+      size="small"
+      type={isNum ? 'number' : 'text'}
+      className={className}
+      value={textValue}
+      onChange={(_, d) => onTextChange(d.value)}
+      onBlur={onTextCommit}
+      placeholder={attr.value == null ? 'null' : ''}
+      data-test-id={testId}
+      title="Value — edit and tab away; onChange fires when the field commits"
+    />
+  );
+}
+
 /**
  * FormPanel — operator UI for poking the formContext store. Lets the developer
  * edit attribute values, fire onChange handlers, toggle control visibility/
@@ -317,122 +496,110 @@ export function FormPanel(): JSX.Element {
 
   return (
     <div className={styles.root} data-test-id="form-panel">
-      <CollapsibleSection
-        id="form"
-        title="Form metadata"
-        titleTooltip="Use this panel to simulate the surrounding Dynamics 365 form: edit attribute values and fire onChange events, toggle control visibility / disabled state, raise notifications, and show/hide tabs — without needing a real form. Useful for any PCF that reads formContext or Xrm.Page."
-        testId="fp-section-form"
-      >
-        <div className={styles.toolbar}>
-          <span title="Form type — what kind of form is open (Create, Update, ReadOnly, Disabled, BulkEdit, etc.)">
-            <Badge appearance="outline" data-test-id="fp-form-type">
-              FormType: {FORM_TYPE_LABEL[snap.formType] ?? snap.formType}
-            </Badge>
-          </span>
-          <span title="Dirty — how many attribute values have changed since the last seed or save">
-            <Badge
-              appearance={snap.dirty ? 'filled' : 'outline'}
-              color={snap.dirty ? 'warning' : undefined}
-              data-test-id="fp-form-dirty"
-            >
-              {snap.dirty ? `Dirty (${snap.dirtyCount})` : 'Clean'}
-            </Badge>
-          </span>
-        </div>
-      </CollapsibleSection>
+      <div className={styles.intro}>
+        Simulate the Dynamics 365 form around your control — no real form needed.
+        Edit field values, toggle control state, raise notifications, and show/hide
+        tabs, then watch how your PCF reacts to{' '}
+        <span className={styles.introCode}>formContext</span> /{' '}
+        <span className={styles.introCode}>Xrm.Page</span>.
+      </div>
 
-      <Divider />
+      <div className={styles.metaStrip} data-test-id="fp-section-form">
+        <span
+          className={styles.metaLabel}
+          title="The form's overall state your control can read: which form type is open and whether any field has unsaved edits."
+        >
+          Form
+        </span>
+        <span title="Form type — what kind of form is open (Create, Update, ReadOnly, Disabled, BulkEdit, etc.)">
+          <Badge appearance="outline" data-test-id="fp-form-type">
+            FormType: {FORM_TYPE_LABEL[snap.formType] ?? snap.formType}
+          </Badge>
+        </span>
+        <span title="Dirty — how many attribute values have changed since the last seed or save">
+          <Badge
+            appearance={snap.dirty ? 'filled' : 'outline'}
+            color={snap.dirty ? 'warning' : undefined}
+            data-test-id="fp-form-dirty"
+          >
+            {snap.dirty ? `Dirty (${snap.dirtyCount})` : 'Clean'}
+          </Badge>
+        </span>
+      </div>
 
       <CollapsibleSection
         id="attributes"
         title={`Attributes (${snap.attributes.length})`}
-        titleTooltip="Attributes — the data fields on the form's record. Each attribute is the underlying column value (formContext.getAttribute(name).getValue()) that controls read from and write to. Edits here fire onChange handlers attached to that attribute, just like typing into a real form field."
+        titleTooltip="Attributes are the data fields on the form's record — the values your control reads and writes via formContext.getAttribute(name)."
         defaultCollapsed={true}
         testId="fp-section-attributes"
       >
+        <div className={styles.intro}>
+          Fields on the record your control reads via{' '}
+          <span className={styles.introCode}>formContext.getAttribute(name)</span>.
+          Change a value with the friendly editor and <strong>onChange fires
+          automatically</strong> — just like a user editing that field on a real form.
+        </div>
         {snap.attributes.length === 0 && (
           <div className={styles.emptyMsg}>
             No attributes seeded. Add records to <code>data.json</code> or bound
             properties to the manifest.
           </div>
         )}
-        {snap.attributes.map(a => (
-          <div
-            key={a.name}
-            className={`${styles.row} ${a.isDirty ? styles.rowDirty : ''}`}
-            data-test-id={`fp-attr-${a.name}`}
-          >
-            <div className={styles.attrCell}>
-              <div
-                className={styles.attrName}
-                title={`${a.name} — column name on the entity record; edit the value and click fire to trigger onChange`}
-              >
-                {a.name}
+        {snap.attributes.map(a => {
+          const isNum = NUMERIC_TYPES.has(a.attributeType);
+          const commitText = () => {
+            const raw = editing[a.name] ?? '';
+            let parsed: any = raw;
+            if (isNum) {
+              const n = Number(raw);
+              parsed = raw === '' ? null : (Number.isFinite(n) ? n : null);
+            } else if (raw === '') {
+              parsed = null;
+            }
+            setAttributeValue(a.name, parsed);
+          };
+          return (
+            <div
+              key={a.name}
+              className={mergeClasses(styles.attrRow, a.isDirty ? styles.rowDirty : undefined)}
+              data-test-id={`fp-attr-${a.name}`}
+            >
+              <div className={styles.attrTop}>
+                <span className={styles.attrName} title={`${a.name} — column name on the record`}>
+                  {a.name}
+                </span>
+                <span className={styles.attrType} title="Field type — determines what values are accepted">
+                  {a.attributeType}
+                </span>
+                {a.isDirty && <span className={styles.dirtyDot} title="Unsaved change">●</span>}
               </div>
-              <div
-                className={styles.attrType}
-                title={`Attribute type — determines what values are accepted (string, integer, boolean, lookup, etc.)`}
-              >
-                {a.attributeType}
+              <div className={styles.attrBottom}>
+                <AttributeEditor
+                  attr={a}
+                  className={styles.attrInput}
+                  textValue={editing[a.name] ?? ''}
+                  onTextChange={(v) => setEditing(prev => ({ ...prev, [a.name]: v }))}
+                  onTextCommit={commitText}
+                />
               </div>
             </div>
-            <Input
-              size="small"
-              value={editing[a.name] ?? ''}
-              onChange={(_, d) => setEditing(prev => ({ ...prev, [a.name]: d.value }))}
-              onBlur={() => {
-                const raw = editing[a.name] ?? '';
-                let parsed: any = raw;
-                if (a.attributeType === 'integer' || a.attributeType === 'decimal' || a.attributeType === 'money') {
-                  const n = Number(raw);
-                  parsed = Number.isFinite(n) ? n : null;
-                } else if (a.attributeType === 'boolean') {
-                  parsed = raw === 'true' || raw === '1';
-                } else if (raw === '') {
-                  parsed = null;
-                }
-                setAttributeValue(a.name, parsed);
-              }}
-              data-test-id={`fp-attr-${a.name}-input`}
-              className={styles.attrInput}
-              title="Value — edit and tab away to update the attribute; booleans accept true/false, empty = null"
-            />
-            <Dropdown
-              size="small"
-              value={a.requiredLevel}
-              selectedOptions={[a.requiredLevel]}
-              onOptionSelect={(_, d) => {
-                if (d.optionValue) setAttributeRequiredLevel(a.name, d.optionValue as RequiredLevel);
-              }}
-              className={styles.attrRequired}
-              data-test-id={`fp-attr-${a.name}-required`}
-              title="Required level — none, recommended, or required; tests mandatory-field behaviour"
-            >
-              {REQUIRED_LEVELS.map(l => <Option key={l} value={l}>{l}</Option>)}
-            </Dropdown>
-            <Button
-              size="small"
-              appearance="subtle"
-              onClick={() => fireOnChange(a.name)}
-              data-test-id={`fp-attr-${a.name}-fire`}
-              className={styles.attrFire}
-              title="Fire onChange — trigger all registered onChange callbacks for this attribute"
-            >
-              fire
-            </Button>
-          </div>
-        ))}
+          );
+        })}
       </CollapsibleSection>
-
-      <Divider />
 
       <CollapsibleSection
         id="controls"
         title={`Controls (${snap.controls.length})`}
-        titleTooltip="Controls — the UI widgets bound to attributes. The same attribute can have multiple controls (e.g. a quick-view form). Controls expose visibility, disabled state, and notification banners that the bound control can react to or trigger."
+        titleTooltip="Controls are the UI widgets bound to fields. Toggle visibility / disabled state or raise a notification to test how your control reacts."
         defaultCollapsed={true}
         testId="fp-section-controls"
       >
+        <div className={styles.intro}>
+          UI controls bound to fields. Toggle <strong>visible</strong> /{' '}
+          <strong>disabled</strong>, or raise a field-level notification, to test
+          how your control responds.
+        </div>
         {snap.controls.map(c => (
           <div key={c.name} className={styles.controlRow} data-test-id={`fp-ctrl-${c.name}`}>
             <span
@@ -459,7 +626,7 @@ export function FormPanel(): JSX.Element {
             />
             <Button
               size="small"
-              appearance="subtle"
+              appearance="secondary"
               onClick={() => {
                 if (c.notifications.size > 0) {
                   clearControlNotification(c.name);
@@ -476,21 +643,23 @@ export function FormPanel(): JSX.Element {
                 ? 'Clear all notifications on this control (formContext.getControl(name).clearNotification(...)).'
                 : 'Raise a test ERROR notification on this control (formContext.getControl(name).setNotification(...)). Useful for verifying that the field-level error indicator appears.'}
             >
-              {c.notifications.size > 0 ? `clr (${c.notifications.size})` : 'notify'}
+              {c.notifications.size > 0 ? `Clear (${c.notifications.size})` : 'Notify'}
             </Button>
           </div>
         ))}
       </CollapsibleSection>
 
-      <Divider />
-
       <CollapsibleSection
         id="tabs"
         title={`Tabs (${snap.tabs.length})`}
-        titleTooltip="Tabs — the top-level form sections (General, Details, Related, etc.). A real form is organised into tabs containing sections containing controls. Toggle visibility and expand/collapse to test PCFs that change layout based on which tab is active."
+        titleTooltip="Tabs are the top-level form sections (General, Details, Related, …). Show/hide or expand/collapse to test controls that adapt to the active tab."
         defaultCollapsed={true}
         testId="fp-section-tabs"
       >
+        <div className={styles.intro}>
+          Form tabs (General, Details, …). Show/hide or expand/collapse to test
+          controls that adapt to the active tab.
+        </div>
         {snap.tabs.map(t => (
           <div key={t.name} className={styles.tabRow} data-test-id={`fp-tab-${t.name}`}>
             <span

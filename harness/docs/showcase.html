@@ -2669,12 +2669,20 @@ Perf:   firstUpdateView: 180ms ·
           </div>
         </div>
         <p class="ms-desc">Align the harness with Dynamics 365 modern theme overrides so controls can be validated against real tenant/app branding, not just generic light/dark tokens.</p>
+      <div class="milestone-card next">
+        <div class="milestone-h">
+          <h3><span class="milestone-num">M14</span>Workbench IA &amp; Form Interaction</h3>
+          <div class="milestone-pills">
+            <span class="milestone-size size-l">L</span>
+            <span class="milestone-pill pill-next">Up next</span>
+          </div>
+        </div>
+        <p class="ms-desc">Reframe the workbench around a real Dynamics 365 interaction model: the Form tab becomes a live form you <em>interact</em> with (not a maker setup screen), and the surrounding chrome is reorganised into intent-based zones &mdash; top app bar, bottom canvas bar, a grouped right side-pane rail, and a user-identity avatar &mdash; mirroring the model-driven app shell.</p>
         <ul class="milestone-list">
-          <li>Load modern theme override payloads from exported app/theme JSON</li>
-          <li>Map overrides into <code>context.fluentDesignLanguage.tokenTheme</code> and <code>context.theming</code> surfaces</li>
-          <li>Preview override variants (light, dark, high-contrast) from the UI</li>
-          <li>Scenario-level theme pinning so screenshots/replays are deterministic</li>
-          <li>Conformance check that compares effective tokens to baseline UCI expectations</li>
+          <li><strong>P1 &mdash; Friendly form editors:</strong> replace raw GUID/optionset text inputs with type-aware controls (lookup picker, option-set dropdown with friendly labels, datetime, boolean toggle); drop the Required-level control; auto-fire <code>onChange</code> on commit (no explicit "fire" button)</li>
+          <li><strong>P2 &mdash; Form-interaction drawer:</strong> render the form fields as a UCI-style drawer in the viewport around the control; switch the visual-regression capture from <code>fullPage</code> to the control element so chrome/drawers never pollute a baseline; drawer defaults closed</li>
+          <li><strong>P3 &mdash; User identity avatar:</strong> top-right avatar flyout to switch the current user from <code>systemuser</code> personas and toggle their security roles (feeds <code>userSettings</code> / <code>getUserRoles()</code>)</li>
+          <li><strong>P4 &mdash; Side-pane rail regroup:</strong> group the right rail into <strong>Setup</strong> (Properties, Data), <strong>Analysis</strong> (Activity = lifecycle + WebAPI + console, Reports = performance/audit/coverage), and <strong>Personalisation</strong> (language, time zone, formats, RTL); move Device form-factor to a bottom-right canvas control; retire the old User/gear tabs into their new homes</li>
         </ul>
       </div>
 
