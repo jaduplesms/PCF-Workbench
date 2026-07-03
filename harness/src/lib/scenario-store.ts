@@ -127,6 +127,11 @@ export interface TestScenario {
    *  synthesise a homegrid + all-columns default for any declared dataset that
    *  doesn't have an entry, preserving pre-P0 behaviour. */
   datasetBindings?: DatasetBindingMap;
+
+  /** When true, the `pcfworkbench batch` CLI skips this scenario during
+   *  headless loop/visual-regression runs. Optional; defaults to false
+   *  (scenario is included). Has no effect on the interactive harness. */
+  skipInBatch?: boolean;
 }
 
 /** Legacy v1 shape — kept for migration only. Do not import outside this file. */
@@ -413,6 +418,7 @@ export function normalizeScenario(raw: unknown): TestScenario | null {
   if (isObject(raw.datasetBindings)) {
     v2.datasetBindings = raw.datasetBindings as DatasetBindingMap;
   }
+  if (raw.skipInBatch === true) v2.skipInBatch = true;
 
   return v2;
 }

@@ -145,7 +145,7 @@ export function AuditPanel({ manifest, bundlePath, cssFiles }: Props) {
           severity: 'warn',
           status: hit.count > 0 ? 'warn' : 'pass',
           message: hit.count > 0
-            ? `Detected ${hit.count} "${hit.token}" reference(s) in bundle output.`
+            ? `Detected ${hit.count} "${hit.token}" reference(s) in the compiled bundle. Note: matches include bundled dependencies, so some hits may originate from third-party code rather than your control source.`
             : `No "${hit.token}" references detected.`,
         }, ignore));
       }
@@ -157,7 +157,7 @@ export function AuditPanel({ manifest, bundlePath, cssFiles }: Props) {
         severity: 'warn',
         status: cssFindings.length > 0 ? 'warn' : 'pass',
         message: cssFindings.length > 0
-          ? `Detected ${cssFindings.length} potentially-global selector(s).`
+          ? `Detected ${cssFindings.length} potentially-global selector(s). These are heuristic matches from the compiled CSS and may include framework or dependency styles.`
           : 'No obvious global selectors detected.',
         details: cssFindings.slice(0, 8),
       }, ignore));
