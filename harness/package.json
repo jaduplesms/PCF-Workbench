@@ -74,7 +74,7 @@
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.2.7",
     "vite": "^8.0.16",
     "zustand": "^5.0.0"
   },
@@ -84,7 +84,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/powerapps-component-framework": "^1.3.18",
     "@types/react": "^18.3.31",
-    "@types/react-dom": "^18.3.7",
+    "@types/react-dom": "^19.2.3",
     "@types/xrm": "^9.0.92",
     "@vitest/coverage-v8": "^4.1.9",
     "tsx": "^4.21.0",
