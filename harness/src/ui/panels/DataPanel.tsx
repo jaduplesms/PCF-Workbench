@@ -4,7 +4,7 @@ import {
   Radio, RadioGroup, Dropdown, Combobox, Option, Spinner, Label, Input,
   TabList, Tab,
 } from '@fluentui/react-components';
-import { ArrowClockwise24Regular, Save24Regular, Globe16Regular, ArrowDownload24Regular, Add16Regular, Delete16Regular, ChevronDown16Regular, ChevronRight16Regular } from '@fluentui/react-icons';
+import { ArrowClockwise24Regular, Save24Regular, Globe16Regular, ArrowDownload24Regular, Add16Regular, Delete16Regular, ChevronDown16Regular, ChevronRight16Regular, Table16Regular, Column16Regular } from '@fluentui/react-icons';
 import { useHarnessStore, type DataSource, type PublicProfile } from '../../store/harness-store';
 import {
   loadEntityData, getEntityStoreKeys, getEntityData,
@@ -43,8 +43,8 @@ const useStyles = makeStyles({
   tableItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '6px 8px',
+    gap: '6px',
+    padding: '2px 6px',
     borderRadius: tokens.borderRadiusMedium,
     cursor: 'pointer',
     fontSize: tokens.fontSizeBase200,
@@ -78,23 +78,28 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  rowChips: {
+  rowMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '8px',
     flexShrink: 0,
+    fontSize: '11px',
+    fontVariantNumeric: 'tabular-nums',
   },
-  rowCounts: {
-    display: 'grid',
-    gridTemplateColumns: '40px 64px',
-    alignItems: 'center',
-    justifyItems: 'end',
-    gap: '4px',
-    flexShrink: 0,
-  },
-  rowCountSlot: {
+  rowMetaItem: {
     display: 'inline-flex',
+    alignItems: 'center',
     justifyContent: 'flex-end',
+    gap: '3px',
+    opacity: 0.75,
+  },
+  metaIcon: {
+    fontSize: '13px',
+    flexShrink: 0,
+    opacity: 0.85,
+  },
+  rowMetaMuted: {
+    opacity: 0.4,
   },
   editorArea: {
     display: 'flex',
@@ -232,8 +237,8 @@ const useStyles = makeStyles({
   sectionList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
-    paddingLeft: '20px',
+    gap: '1px',
+    paddingLeft: '6px',
     marginBottom: '4px',
   },
 });
@@ -1689,21 +1694,22 @@ export function DataPanel() {
                     )}
                     {row.name}
                   </span>
-                  <div className={styles.rowChips}>
-                    {!row.hasData && (
-                      <Badge appearance="tint" color="subtle" size="small" title="Schema exists but no records yet.">◌ no data</Badge>
-                    )}
-                  </div>
-                  <div className={styles.rowCounts}>
-                    <span className={styles.rowCountSlot}>
-                      <Badge appearance="filled" color={isSelected ? 'subtle' : 'informative'} size="small" title={`${row.recordCount} records`}>
-                        {row.recordCount}
-                      </Badge>
+                  <div className={styles.rowMeta}>
+                    <span
+                      className={`${styles.rowMetaItem} ${row.recordCount === 0 ? styles.rowMetaMuted : ''}`}
+                      style={{ minWidth: 34 }}
+                      title={row.recordCount === 0 ? 'No records yet' : `${row.recordCount} record${row.recordCount === 1 ? '' : 's'}`}
+                    >
+                      <Table16Regular className={styles.metaIcon} />
+                      {row.recordCount}
                     </span>
-                    <span className={styles.rowCountSlot}>
-                      <Badge appearance="tint" color={isSelected ? 'subtle' : 'informative'} size="small" title={row.hasSchema ? `${row.columnCount} schema columns` : `${row.columnCount} columns (inferred from rows — no schema)`}>
-                        {row.columnCount} col
-                      </Badge>
+                    <span
+                      className={styles.rowMetaItem}
+                      style={{ minWidth: 40 }}
+                      title={row.hasSchema ? `${row.columnCount} schema columns` : `${row.columnCount} columns (inferred from rows — no schema)`}
+                    >
+                      <Column16Regular className={styles.metaIcon} />
+                      {row.columnCount}
                     </span>
                   </div>
                   <Button
