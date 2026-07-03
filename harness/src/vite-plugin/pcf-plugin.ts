@@ -1288,6 +1288,22 @@ export const launchedAsGallery = ${state.launchedAsGallery};`;
           }
         }
 
+        // Serve .pcf-audit.json (optional rule ignores / thresholds for Audit panel)
+        if (urlPath === '/.pcf-audit.json' || urlPath === '/pcf-audit.json') {
+          const auditCandidates = [
+            path.join(state.controlDir, '.pcf-audit.json'),
+            path.join(state.projectRoot, '.pcf-audit.json'),
+          ];
+          for (const filePath of auditCandidates) {
+            if (fs.existsSync(filePath)) {
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Cache-Control', 'no-cache');
+              fs.createReadStream(filePath).pipe(res);
+              return;
+            }
+          }
+        }
+
         // Return empty data if no file found
         res.setHeader('Content-Type', 'application/json');
         res.end(urlPath === '/test-scenarios.json' ? '[]' : '{}');

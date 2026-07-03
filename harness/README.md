@@ -74,7 +74,7 @@ Full mock implementation of the PCF Context interface:
 - Watches `out/controls/*/bundle.js` for changes
 - When you rebuild the PCF project (`npm run build`), the harness auto-destroys and re-initialises the control
 
-### Live Dataverse Mode (M2.P1, Windows-only, read-only)
+### Live Dataverse Mode (M2, shipped)
 
 Switch the **Data** panel from **Mock** to **Live** to point `context.webAPI.retrieveRecord` and `retrieveMultipleRecords` at a real Dataverse org instead of `data.json`. Useful for verifying a control against production-shape data, FormattedValue annotations, lookup logical names, and large/edge-case rowsets.
 
@@ -90,10 +90,11 @@ pac auth create --url https://<yourorg>.crm.dynamics.com
 3. Pick a profile from the dropdown (auto-selected from your last choice or `pac auth select`).
 4. The control re-initialises automatically; the top bar shows a red **🌐 LIVE: \<org\>** pill and the form chrome gets a 1px red border.
 
-**Limits in P1:**
-- **Read-only.** `createRecord` / `updateRecord` / `deleteRecord` throw — writes unlock in M2.P3.
-- **Windows-only.** Reads PAC's MSAL token cache via DPAPI (`%LOCALAPPDATA%\Microsoft\PowerAppsCli\tokencache_msalv3.dat`). macOS / Linux support is M2-future.
-- **No on-disk response cache.** Each call hits the org. Caching arrives in M2.P2.
+**Current behavior:**
+- **Read-first with explicit write confirmation.** Live `createRecord` / `updateRecord` / `deleteRecord` prompt for per-call confirmation before executing.
+- **On-disk live response cache is enabled.** Second and later reads are replayed from the proxy cache unless bypassed.
+- **Snapshot live → mock is built in.** Use the Data panel action to capture the current live slice into mock/scenario data for offline replay.
+- **Windows-first PAC token support.** Reads PAC's MSAL token cache via DPAPI (`%LOCALAPPDATA%\Microsoft\PowerAppsCli\tokencache_msalv3.dat`).
 - If your PAC token expired, the harness shows a click-to-copy `pac auth create --url <org>` banner. Run it in a terminal, then click **Retry**.
 
 **How it works:**
@@ -242,33 +243,33 @@ Reproduce the full Unified Client Interface runtime so any control that runs in 
 - [x] Coverage panel that flags any runtime call hitting an unimplemented shim
 - [x] Versioned shim profiles (Dataverse 9.0 vs 9.2 vs latest)
 
-### Milestone 2 — Live Dataverse Bridge  ·  `L`
-Optional connected mode that replaces `data.json` with a real org. **Headline for the next release.**
-- [ ] Live mode toggle that uses the active `pac auth` profile
-- [ ] Read-only by default; writes require per-call confirmation
-- [ ] On-disk response cache so repeat runs stay fast
-- [ ] One-click "snapshot live data into data.json" for offline replay
-- [ ] Indicator chrome when the control is hitting live data
-- [ ] Per-scenario binding so scenarios can pin themselves to live or mock mode
+### Milestone 2 — Live Dataverse Bridge  ·  `L` — ✅ Shipped
+Optional connected mode that replaces `data.json` with a real org.
+- [x] Live mode toggle that uses the active `pac auth` profile
+- [x] Read-first behavior with explicit per-call write confirmation
+- [x] On-disk response cache so repeat runs stay fast
+- [x] One-click "snapshot live data into mock/scenario state" for offline replay
+- [x] Indicator chrome when the control is hitting live data
+- [x] Per-scenario binding so scenarios can pin themselves to live or mock mode
 
-### Milestone 3 — Automated Scenario Runner + Playwright  ·  `L`
+### Milestone 3 — Automated Scenario Runner + Playwright  ·  `L` — ✅ Shipped
 Turn the harness into a test framework, not just a dev tool.
-- [ ] Headless runner that executes every scenario in `test-scenarios.json`
-- [ ] Per-scenario artifacts: screenshot, lifecycle log, perf metrics, console output
-- [ ] Visual regression with pixel-diff against committed baselines
-- [ ] Performance regression detection (render-time budget per scenario)
-- [ ] CI-friendly artifacts written to `out/.harness-runs/`
-- [ ] Reusable GitHub Actions workflow
+- [x] Headless runner that executes saved scenarios via `pcfworkbench batch`
+- [x] Per-scenario artifacts: screenshot + loop report under batch output folders
+- [x] Visual regression with pixel-diff against committed baselines
+- [x] Performance budget detection in loop reports (`perfBudget` status/violations)
+- [x] CI-friendly aggregated artifacts (`batch-report.json`, `batch-summary.md`)
+- [x] Copy-pasteable GitHub Actions workflow for loop gating (`docs/examples/pcf-loop.yml`)
 
-### Milestone 4 — Diagnostics & Linting Panel  ·  `M`
+### Milestone 4 — Diagnostics & Linting Panel  ·  `M` — ✅ Shipped
 A new "Audit" tab that enforces PCF best-practice constraints automatically.
-- [ ] axe-core accessibility audit
-- [ ] Banned-API check (`localStorage`, `sessionStorage`, `document.cookie`, etc.)
-- [ ] Resource-cleanup completeness (extends the current leak detector with severities)
-- [ ] Manifest validation (bound property must be `value`, version-bump check, feature-usage check)
-- [ ] CSS scoping check (warn on unprefixed selectors)
-- [ ] Bundle size budget warning
-- [ ] Per-rule ignore mechanism via `.pcf-audit.json`
+- [x] axe-core accessibility audit
+- [x] Banned-API check (`localStorage`, `sessionStorage`, `document.cookie`, etc.)
+- [x] Resource-cleanup completeness (extends the current leak detector with severities)
+- [x] Manifest validation (bound property must be `value`, version-bump check, feature-usage check)
+- [x] CSS scoping check (warn on unprefixed selectors)
+- [x] Bundle size budget warning
+- [x] Per-rule ignore mechanism via `.pcf-audit.json`
 
 ### Milestone 5 — Field Service Mobile / Offline Profiles  ·  `M`
 Simulate the mobile app's offline-profile semantics so FSM controls can be validated locally.

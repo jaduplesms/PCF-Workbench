@@ -2514,7 +2514,7 @@ Perf:   firstUpdateView: 180ms ·
   <div class="container">
     <div class="section-header reveal">
       <h2>What's next</h2>
-      <p>Locking down the foundations now that the public release is out &mdash; unit tests for the pure-logic core, then perf budgets &amp; PR-time CI gating.</p>
+      <p>Locking down foundations after the M3 closeout &mdash; unit-test hardening, reusable CI packaging, and the next quality gates.</p>
     </div>
     <div class="milestone-grid reveal">
 
@@ -2535,22 +2535,21 @@ Perf:   firstUpdateView: 180ms ·
         </ul>
       </div>
 
-      <div class="milestone-card headline">
+      <div class="milestone-card shipped">
         <div class="milestone-h">
-          <h3><span class="milestone-num">M3.P2</span>Perf Budgets &amp; CI Loop</h3>
+          <h3><span class="milestone-num">M3.P2</span>Batch Runner + Visual Regression Gate</h3>
           <div class="milestone-pills">
             <span class="milestone-size size-s">S</span>
-            <span class="milestone-pill pill-headline">Headline</span>
+            <span class="milestone-pill pill-shipped">Shipped</span>
           </div>
         </div>
-        <p class="ms-desc">Builds on the <a href="#" onclick="document.querySelector('[data-view=&quot;roadmap&quot;]').click();return false">M3.P1 AI Build Loop foundation</a>: turn the loop into a PR-time quality gate. Optional perf budgets per control, a copy-pasteable GitHub Actions workflow, and an auto-posted PR-comment summary.</p>
+        <p class="ms-desc">Builds on <strong>M3.P1</strong> and closes the Scenario Runner milestone: <code>pcfworkbench batch</code> executes saved scenarios, emits per-scenario reports/screenshots, compares against visual baselines, and writes aggregated outputs for CI and PR review.</p>
         <ul class="milestone-list">
-          <li>Optional <code>perfBudget</code> (per-control or per-scenario): <code>firstUpdateViewMs</code>, <code>avgRenderTimeMs</code>, <code>maxRenderTimeMs</code>, <code>renderCount</code>, <code>leaks</code></li>
-          <li>Soft <code>warn</code> and hard <code>fail</code> thresholds; budget violations flip the loop to non-zero exit</li>
-          <li>Report schema bump to v2: <code>budget.status</code> + <code>budget.violations[]</code> with actual / budget / delta</li>
-          <li>Copy-pasteable <code>.github/workflows/pcf-loop.yml</code> &mdash; runs on PR, uploads report + screenshot as artifacts</li>
-          <li>Auto-posted PR comment: status / lifecycle / leaks / render perf / budget violations</li>
-          <li>Non-zero CLI exit fails the workflow &rarr; PR check red, merge blocked</li>
+          <li class="done"><code>pcfworkbench batch</code> command for scenario iteration across <code>test-scenarios.json</code></li>
+          <li class="done">Per-scenario output folders (<code>report.json</code>, <code>screenshot.png</code>, optional <code>diff.png</code>)</li>
+          <li class="done">Visual baseline update/compare flow (<code>--update-baselines</code>, <code>--diff-threshold</code>)</li>
+          <li class="done">Aggregated outputs: <code>batch-report.json</code> + <code>batch-summary.md</code></li>
+          <li class="done">Non-zero exit on regression/failure for CI gating</li>
         </ul>
       </div>
 
@@ -2567,22 +2566,22 @@ Perf:   firstUpdateView: 180ms ·
     </div>
     <div class="milestone-grid reveal">
 
-      <div class="milestone-card later">
+      <div class="milestone-card shipped">
         <div class="milestone-h">
           <h3><span class="milestone-num">M4</span>Diagnostics &amp; Linting</h3>
           <div class="milestone-pills">
             <span class="milestone-size size-m">M</span>
-            <span class="milestone-pill pill-later">Later</span>
+            <span class="milestone-pill pill-shipped">Shipped</span>
           </div>
         </div>
         <p class="ms-desc">A new "Audit" tab that enforces PCF best-practice constraints automatically.</p>
         <ul class="milestone-list">
-          <li>axe-core accessibility audit</li>
-          <li>Banned-API check (<code>localStorage</code>, <code>sessionStorage</code>, cookies)</li>
-          <li>Manifest validation (bound property must be <code>value</code>, version-bump check)</li>
-          <li>CSS scoping check (warn on unprefixed selectors)</li>
-          <li>Bundle size budget warning</li>
-          <li>Per-rule ignore via <code>.pcf-audit.json</code></li>
+          <li class="done">axe-core accessibility audit</li>
+          <li class="done">Banned-API check (<code>localStorage</code>, <code>sessionStorage</code>, cookies)</li>
+          <li class="done">Manifest validation (bound property must be <code>value</code>, version-bump check)</li>
+          <li class="done">CSS scoping check (warn on unprefixed selectors)</li>
+          <li class="done">Bundle size budget warning</li>
+          <li class="done">Per-rule ignore via <code>.pcf-audit.json</code></li>
         </ul>
       </div>
 
@@ -2658,6 +2657,24 @@ Perf:   firstUpdateView: 180ms ·
           <li>Recording mode &mdash; capture interactions, replay as scenario</li>
           <li>VS Code extension wrapper for one-click harness launch</li>
           <li>Side-by-side control-version comparison</li>
+        </ul>
+      </div>
+
+      <div class="milestone-card later">
+        <div class="milestone-h">
+          <h3><span class="milestone-num">M13</span>Modern Theming Overrides Parity</h3>
+          <div class="milestone-pills">
+            <span class="milestone-size size-m">M</span>
+            <span class="milestone-pill pill-later">Later</span>
+          </div>
+        </div>
+        <p class="ms-desc">Align the harness with Dynamics 365 modern theme overrides so controls can be validated against real tenant/app branding, not just generic light/dark tokens.</p>
+        <ul class="milestone-list">
+          <li>Load modern theme override payloads from exported app/theme JSON</li>
+          <li>Map overrides into <code>context.fluentDesignLanguage.tokenTheme</code> and <code>context.theming</code> surfaces</li>
+          <li>Preview override variants (light, dark, high-contrast) from the UI</li>
+          <li>Scenario-level theme pinning so screenshots/replays are deterministic</li>
+          <li>Conformance check that compares effective tokens to baseline UCI expectations</li>
         </ul>
       </div>
 

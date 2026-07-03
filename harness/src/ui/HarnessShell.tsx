@@ -6,7 +6,7 @@ import {
   PlugConnected24Regular, Phone24Regular, TopSpeed24Regular,
   Settings24Regular, WeatherMoon24Regular, WeatherSunny24Regular,
   Database24Regular, Play24Regular, Person24Regular,
-  Form24Regular, Shield24Regular, ArrowClockwise20Regular, Globe16Regular,
+  Form24Regular, Shield24Regular, Warning24Regular, ArrowClockwise20Regular, Globe16Regular,
   ChevronRight20Regular, ChevronLeft20Regular,
   ChevronUp20Regular, ChevronDown20Regular,
 } from '@fluentui/react-icons';
@@ -26,6 +26,7 @@ import { FormChrome } from './panels/FormChrome';
 import { AppNotificationBanner } from './AppNotificationBanner';
 import { LiveReauthBanner } from './LiveReauthBanner';
 import { CoveragePanel } from './panels/CoveragePanel';
+import { AuditPanel } from './panels/AuditPanel';
 import { useLivePageRecord } from '../loader/use-live-page-record';
 import { useLiveDatasetRecords } from '../loader/use-live-dataset-records';
 import { isLiveBlocked, liveBlockReason } from '../lib/live-block';
@@ -173,7 +174,7 @@ interface Props {
   launchedAsGallery: boolean;
 }
 
-type SidePanelTab = 'properties' | 'form' | 'data' | 'network' | 'device' | 'user' | 'lifecycle' | 'performance' | 'coverage';
+type SidePanelTab = 'properties' | 'form' | 'data' | 'network' | 'device' | 'user' | 'lifecycle' | 'performance' | 'audit' | 'coverage';
 
 /** M9 — Build watcher status pill.
  *
@@ -524,6 +525,7 @@ export function HarnessShell({ manifest, bundlePath, cssFiles, controlDir, launc
                     <Tab value="user" icon={<Person24Regular />} title="User — switch language, time zone, RTL and security roles" />
                     <Tab value="lifecycle" icon={<Play24Regular />} title="Lifecycle — see when init / updateView / destroy fire and how long they take" />
                     <Tab value="performance" icon={<TopSpeed24Regular />} title="Performance — render timings, WebAPI calls, and resource-leak detection" />
+                    <Tab value="audit" icon={<Warning24Regular />} title="Audit — diagnostics and lint-style checks for accessibility, manifest, CSS, bundle size, and banned APIs" />
                     <Tab value="coverage" icon={<Shield24Regular />} title="Coverage — see which platform APIs your control actually uses" />
                   </TabList>
                 </div>
@@ -536,6 +538,7 @@ export function HarnessShell({ manifest, bundlePath, cssFiles, controlDir, launc
                   {activeTab === 'user' && <UserSettingsPanel />}
                   {activeTab === 'lifecycle' && <LifecyclePanel />}
                   {activeTab === 'performance' && <PerformancePanel />}
+                  {activeTab === 'audit' && <AuditPanel manifest={manifest} bundlePath={bundlePath} cssFiles={cssFiles} />}
                   {activeTab === 'coverage' && <CoveragePanel />}
                 </div>
               </>

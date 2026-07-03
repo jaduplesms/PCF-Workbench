@@ -1,6 +1,6 @@
 # M11 — Unit Tests for Pure-Logic Modules — Plan
 
-> **Status:** Draft for review · **Depends on:** `DESIGN.md` (sign-off required before M1 starts)
+> **Status:** Completed (technical gates green) · **Depends on:** `DESIGN.md`
 
 5 milestones. Each ends at a hard, automatable acceptance gate. AI stops at the first failure for human review.
 
@@ -92,11 +92,11 @@ Todos:
 **Goal:** Close out P1 — final two modules + the docs update + ship.
 
 Todos:
-- [ ] `date-rebase.ts`: anchor-relative rebasing · DST forward + back transitions · leap year (Feb 29) handling · timezone normalisation · null/undefined date fields left untouched · array of records.
-- [ ] `data-store.ts`: `replaceMockEntityData` deep-clones (mutating source doesn't affect store) · `mergeKeyedMockEntityData` dedups by id · subscriber notify fires exactly once per replace.
-- [ ] Update `harness/README.md` "Validation workflow" section to mention `npm run test` as the first-gate alongside `npm run typecheck`.
-- [ ] Update `.github/copilot-instructions.md` "Commands" + "Validation workflow" sections.
-- [ ] CI: add `npm run test:run` step to `.github/workflows/*` (if any exist) before Playwright runs.
+- [x] `date-rebase.ts`: anchor-relative rebasing · DST forward + back transitions · leap year (Feb 29) handling · timezone normalisation · null/undefined date fields left untouched · array of records.
+- [x] `data-store.ts`: `replaceMockEntityData` deep-clones (mutating source doesn't affect store) · `mergeKeyedMockEntityData` dedups by id · subscriber notify fires exactly once per replace.
+- [x] Update `harness/README.md` "Validation workflow" section to mention `npm run test` as the first-gate alongside `npm run typecheck`.
+- [x] Update `.github/copilot-instructions.md` "Commands" + "Validation workflow" sections.
+- [x] CI: add `npm run test:run` step to `.github/workflows/*` (if any exist) before Playwright runs.
 - [ ] Commit: `test(harness): M11 P1 unit-test pass — vitest scaffold + 5 modules`.
 
 **Acceptance gate (M5):**
@@ -120,3 +120,11 @@ Todos:
 ---
 
 *Once approved, AI executes M1, halts at first failing acceptance gate for review.*
+
+---
+
+## Closeout evidence
+
+- `npm run test:run -- src/lib/scenario-store.test.ts src/parser/manifest-parser.test.ts src/shim/web-api.test.ts src/store/date-rebase.test.ts src/store/data-store.test.ts` → **176 passed / 0 failed**.
+- `npm run typecheck` → **green**.
+- `npx playwright test tests/conformance.spec.ts --reporter=list` (with `HARNESS_URL=http://127.0.0.1:8190`) → **2 passed / 0 failed**.

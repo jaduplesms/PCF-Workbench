@@ -11,6 +11,7 @@ import {
   scenariosStorageKey,
   activeScenarioStorageKey,
   autoGenSuppressStorageKey,
+  buildDefaultScenario,
   normalizeScenario,
   normalizeScenarioList,
   nextTestScenarioNames,
@@ -18,15 +19,37 @@ import {
   renameScenario,
   deleteScenario,
   upsertScenario,
+  resolveScenarioValues,
+  captureScenarioFromStore,
+  applyScenarioToStore,
+  applyScenarioAsActive,
+  bootstrapLegacyDataJson,
   SCENARIO_SCHEMA_VERSION,
   type TestScenario,
 } from './scenario-store';
+import { useHarnessStore } from '../store/harness-store';
+import {
+  clearEntityData,
+  getEntityData,
+  loadEntityData,
+  replaceMockEntityData,
+} from '../store/data-store';
+import { clearMetadata, getEntityMetadata } from '../store/metadata-store';
 
 const v2 = (name: string, extra: Partial<TestScenario> = {}): TestScenario => ({
   schemaVersion: SCENARIO_SCHEMA_VERSION,
   name,
   savedAt: '2026-01-01T00:00:00.000Z',
   ...extra,
+});
+
+const INITIAL_STORE_STATE = useHarnessStore.getState();
+
+beforeEach(() => {
+  useHarnessStore.setState(INITIAL_STORE_STATE, true);
+  clearEntityData();
+  clearMetadata();
+  vi.restoreAllMocks();
 });
 
 /* -------------------------------------------------------------------------- */
@@ -403,16 +426,237 @@ describe('upsertScenario', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* Store-coupled functions — queued for a future pass                         */
+/* Store-coupled functions                                                     */
 /* -------------------------------------------------------------------------- */
 
-// These functions read from / write to the live Zustand store and the in-memory
-// entity-data store. Testing them properly without `vi.mock` (per DESIGN §6 Q5)
-// requires standing up real store instances per test and seeding entity data.
-// Queued as a follow-up so M11.M2 ships now without scope creep.
-describe.todo('buildDefaultScenario (store-coupled: reads getMockEntityDataSnapshot)');
-describe.todo('resolveScenarioValues (store-coupled: reads manifest + getEntityData)');
-describe.todo('captureScenarioFromStore (store-coupled: reads useHarnessStore.getState)');
-describe.todo('applyScenarioToStore (store-coupled: writes to useHarnessStore via setters)');
-describe.todo('applyScenarioAsActive (store-coupled: wraps applyScenarioToStore + setActiveScenarioName)');
-describe.todo('captureScenarioFromStore: live mode omits dataRecords (rubber-duck #4 regression)');
+describe('buildDefaultScenario', () => {
+  it('captures manifest defaults and omits dataRecords when mock store is empty', () => {
+    const manifest = {
+      namespace: 'PcfWorkbench',
+      constructor: 'Demo',
+      properties: [
+        { name: 'title', ofType: 'SingleLine.Text', usage: 'input', defaultValue: 'Hello' },
+        { name: 'enabled', ofType: 'TwoOptions', usage: 'input', defaultValue: null },
+        { name: 'count', ofType: 'Whole.None', usage: 'input', defaultValue: null },
+      ],
+      dataSets: [],
+      typeGroups: {},
+    } as any;
+    const scenario = buildDefaultScenario(manifest, 'Default');
+    expect(scenario.schemaVersion).toBe(2);
+    expect(scenario.name).toBe('Default');
+    expect(scenario.propertyValues?.title).toBe('Hello');
+    expect(typeof scenario.propertyValues?.enabled).toBe('boolean');
+    expect(typeof scenario.propertyValues?.count).toBe('number');
+    expect(scenario.dataRecords).toBeUndefined();
+  });
+
+  it('includes dataRecords snapshot when mock store is non-empty', () => {
+    loadEntityData({ account: [{ accountid: 'a1', name: 'Acme' }] });
+    const scenario = buildDefaultScenario(null, 'Default');
+    expect(scenario.dataRecords).toEqual({
+      account: [{ accountid: 'a1', name: 'Acme' }],
+    });
+  });
+});
+
+describe('resolveScenarioValues', () => {
+  it('returns propertyValues as-is when no fieldBindings are present', () => {
+    const result = resolveScenarioValues(v2('No bindings', { propertyValues: { foo: 'bar' } }));
+    expect(result).toEqual({ foo: 'bar' });
+  });
+
+  it('resolves bound values from page record + fieldBindings', () => {
+    loadEntityData({
+      account: [
+        { accountid: 'a1', name: 'Acme', revenue: 123 },
+      ],
+    });
+    const scenario = v2('Bindings', {
+      propertyValues: { title: 'fallback' },
+      fieldBindings: { title: 'name', amount: 'revenue' },
+      pageContext: { entityId: 'a1', typeName: 'account' },
+    });
+    const result = resolveScenarioValues(scenario);
+    expect(result).toEqual({ title: 'Acme', amount: 123 });
+  });
+
+  it('converts formatted lookup payload into LookupValue[] shape', () => {
+    loadEntityData({
+      account: [{
+        accountid: 'a1',
+        _primarycontactid_value: '11111111-1111-1111-1111-111111111999',
+        '_primarycontactid_value@OData.Community.Display.V1.FormattedValue': 'Alice Johnson',
+      }],
+    });
+    const scenario = v2('Lookup conversion', {
+      fieldBindings: { contact: 'primarycontactid' },
+      pageContext: { entityId: 'a1', typeName: 'account' },
+    });
+    const result = resolveScenarioValues(scenario);
+    expect(result.contact).toEqual([{
+      id: '11111111-1111-1111-1111-111111111999',
+      name: 'Alice Johnson',
+      entityType: 'primarycontactid',
+    }]);
+  });
+
+  it('backfills defaults for manifest properties omitted by the scenario', () => {
+    useHarnessStore.setState({
+      manifest: {
+        namespace: 'PcfWorkbench',
+        constructor: 'Demo',
+        properties: [
+          { name: 'title', ofType: 'SingleLine.Text', usage: 'input', defaultValue: 'Hello' },
+          { name: 'enabled', ofType: 'TwoOptions', usage: 'input', defaultValue: null },
+        ],
+        dataSets: [],
+        typeGroups: {},
+      } as any,
+    });
+    const result = resolveScenarioValues(v2('Backfill', { propertyValues: {} }));
+    expect(result.title).toBe('Hello');
+    expect(typeof result.enabled).toBe('boolean');
+  });
+});
+
+describe('captureScenarioFromStore', () => {
+  it('captures mock-mode state including dataRecords snapshot', () => {
+    replaceMockEntityData({ account: [{ accountid: 'a1', name: 'Acme' }] });
+    useHarnessStore.setState({
+      propertyValues: { title: 'Hello' },
+      pageEntityId: 'a1',
+      pageEntityTypeName: 'account',
+      pageEntityRecordName: 'Acme',
+      networkMode: 'slow3g',
+      customLatencyMs: 1500,
+      devicePreset: 'desktop',
+      containerWidth: 500,
+      containerHeight: 300,
+      host: 'Web',
+      isFullBleed: false,
+      userLanguageId: 1033,
+      userIsRTL: false,
+      userTimeZoneOffsetMinutes: 0,
+      userId: 'u1',
+      userName: 'Alice',
+      userSecurityRoles: ['Basic User'],
+      isControlDisabled: true,
+      dataSource: 'mock',
+    });
+    const snap = captureScenarioFromStore('Snap', '2026-01-02T00:00:00.000Z');
+    expect(snap.name).toBe('Snap');
+    expect(snap.dataSource).toBe('mock');
+    expect(snap.dataRecords).toEqual({ account: [{ accountid: 'a1', name: 'Acme' }] });
+  });
+
+  it('omits dataRecords in live mode and includes liveProfile pin', () => {
+    useHarnessStore.setState({
+      dataSource: 'live',
+      liveProfile: {
+        user: 'u',
+        orgUrl: 'https://example.crm.dynamics.com',
+        tenantId: 't',
+        authority: 'a',
+        friendlyName: 'Example',
+        environmentType: null,
+        environmentGeo: null,
+        isCurrent: true,
+      },
+    });
+    const snap = captureScenarioFromStore('Live snap', '2026-01-02T00:00:00.000Z');
+    expect(snap.dataSource).toBe('live');
+    expect(snap.dataRecords).toBeUndefined();
+    expect(snap.liveProfile).toEqual({
+      orgUrl: 'https://example.crm.dynamics.com',
+      friendlyName: 'Example',
+    });
+  });
+});
+
+describe('applyScenarioToStore / applyScenarioAsActive', () => {
+  it('applies property values + context + network + device + data + metadata', () => {
+    const scenario = v2('Apply me', {
+      propertyValues: { title: 'Applied' },
+      pageContext: { entityId: 'a1', typeName: 'account', recordName: 'Acme' },
+      network: { mode: 'offline', customLatencyMs: 2500 },
+      device: { preset: 'iphone-14', containerWidth: 390, containerHeight: 844, host: 'Mobile', isFullBleed: true },
+      userSettings: { userName: 'Mobile Tech' },
+      isControlDisabled: true,
+      dataSource: 'mock',
+      dataRecords: { account: [{ accountid: 'a1', name: 'Acme' }] },
+      metadata: {
+        account: {
+          displayName: 'Account',
+          columns: { name: { displayName: 'Name', type: 'SingleLine.Text' } },
+          primaryIdAttribute: 'accountid',
+          primaryNameAttribute: 'name',
+        },
+      },
+    });
+
+    applyScenarioToStore(scenario);
+    const s = useHarnessStore.getState();
+    expect(s.propertyValues).toEqual({ title: 'Applied' });
+    expect(s.pageEntityId).toBe('a1');
+    expect(s.pageEntityTypeName).toBe('account');
+    expect(s.pageEntityRecordName).toBe('Acme');
+    expect(s.networkMode).toBe('offline');
+    expect(s.customLatencyMs).toBe(2500);
+    expect(s.devicePreset).toBe('iphone-14');
+    expect(s.containerWidth).toBe(390);
+    expect(s.containerHeight).toBe(844);
+    expect(s.host).toBe('Mobile');
+    expect(s.isFullBleed).toBe(true);
+    expect(s.userName).toBe('Mobile Tech');
+    expect(s.isControlDisabled).toBe(true);
+    expect(getEntityData('account')).toEqual([{ accountid: 'a1', name: 'Acme' }]);
+    expect(getEntityMetadata('account')?.primaryIdAttribute).toBe('accountid');
+  });
+
+  it('resets device fields to defaults when scenario.device is absent', () => {
+    useHarnessStore.setState({
+      devicePreset: 'iphone-14',
+      containerWidth: 390,
+      containerHeight: 844,
+      host: 'Mobile',
+      isFullBleed: true,
+    });
+    applyScenarioToStore(v2('No device block', { propertyValues: {} }));
+    const s = useHarnessStore.getState();
+    expect(s.devicePreset).toBe('desktop');
+    expect(s.containerWidth).toBeNull();
+    expect(s.containerHeight).toBeNull();
+    expect(s.host).toBe('Web');
+    expect(s.isFullBleed).toBe(false);
+  });
+
+  it('sets active scenario and clears dirty flag transactionally', () => {
+    useHarnessStore.setState({ activeScenarioName: 'Old', isDirty: true });
+    const scenario = v2('New Active', { propertyValues: { x: 1 } });
+    applyScenarioAsActive('Demo.Control', scenario);
+    const s = useHarnessStore.getState();
+    expect(s.activeScenarioName).toBe('New Active');
+    expect(s.isDirty).toBe(false);
+  });
+});
+
+describe('bootstrapLegacyDataJson', () => {
+  it('loads valid legacy data into the mock store and returns true', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ account: [{ accountid: 'a1', name: 'Acme' }] }),
+    }));
+    const result = await bootstrapLegacyDataJson();
+    expect(result).toBe(true);
+    expect(getEntityData('account')).toEqual([{ accountid: 'a1', name: 'Acme' }]);
+  });
+
+  it('returns false when endpoint responds with non-object payload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    }));
+    await expect(bootstrapLegacyDataJson()).resolves.toBe(false);
+  });
+});

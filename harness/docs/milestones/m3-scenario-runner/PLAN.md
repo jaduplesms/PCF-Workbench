@@ -2,7 +2,7 @@
 
 > Companion to `DESIGN.md`. Each phase has a Playwright acceptance gate; a phase isn't done until it's green. Resume by reading this file + the latest checkpoint.
 
-**Status:** awaiting kickoff sign-off (design + plan + todos ready, no code yet).
+**Status:** ✅ closed (shipped) — milestone accepted and closed on 2026-07-01.
 
 ---
 
@@ -19,6 +19,14 @@
 | **P6** | Docs + showcase + README + skill update | S | shipped writing | README leads with `batch`, showcase card updated, skill mentions `batch` |
 
 **Total:** 7 phases. P0–P4 land in `harness/`. P5 needs a new tiny repo (action wrapper). P6 is the close.
+
+### Closeout snapshot
+
+- ✅ `pcfworkbench batch` shipped (single-control, scenario iteration, per-scenario artifacts)
+- ✅ Visual regression shipped (`--update-baselines`, `--diff-threshold`, `diff.png` emission)
+- ✅ Aggregated outputs shipped (`batch-report.json`, `batch-summary.md`)
+- ✅ Batch command documented in CLI help and milestone docs
+- 📌 Remaining stretch ideas (render-once refactor, reusable action hardening) are tracked as follow-on roadmap work, not blockers for M3 closeout
 
 ---
 

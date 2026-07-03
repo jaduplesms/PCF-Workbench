@@ -1,6 +1,6 @@
 # M3 — Scenario Runner + Playwright — Design
 
-> **Status:** Draft for review · **Author:** AI-coauthored (Copilot + jaduples) · **Last updated:** 2026-06-23
+> **Status:** Closed / shipped scope · **Author:** AI-coauthored (Copilot + jaduples) · **Last updated:** 2026-07-01
 
 Promote `pcfworkbench loop` from a **single-render headless gate** into a **batch runner** that exercises every saved scenario for a control with visual + perf regression detection, producing a single aggregated report that CI can post back to a PR. Reuses M2's scenario store, M11's Vitest infra, and M12's CLI shell — no new framework choices.
 

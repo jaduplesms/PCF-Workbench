@@ -24,6 +24,12 @@ import { dataverseSecurity } from '../src/vite-plugin/dataverse-security';
 import { dataverseProxy } from '../src/vite-plugin/dataverse-proxy';
 import { fluentCdnPlugin } from '../src/vite-plugin/fluent-cdn';
 import { resolvePcfTarget, ResolveTargetError } from '../src/cli/resolve-target';
+import { assertDiffThreshold, diffPngBuffers } from '../src/cli/pixel-diff';
+import {
+  buildBatchReport,
+  toBatchSummaryMarkdown,
+  type BatchScenarioResult,
+} from '../src/cli/batch-report';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const harnessRoot = path.resolve(__dirname, '..');
@@ -237,6 +243,163 @@ program
     process.exit(exitCode);
   });
 
+/* ---------------------------------------------------------------- */
+/* `batch` subcommand — run loop across all saved scenarios + diff. */
+/* ---------------------------------------------------------------- */
+program
+  .command('batch')
+  .description('Run loop across saved scenarios and detect visual regressions.')
+  .argument('[path]', 'Path to the PCF control directory. Defaults to the current directory.')
+  .option('--path <dir>', '(Legacy) Path to the PCF control directory. Prefer the positional [path] argument.')
+  .option('--out <dir>', 'Directory to write batch-report.json + per-scenario artifacts', './pcf-loop-reports')
+  .option('--baseline <dir>', 'Directory containing per-scenario baseline PNGs. Defaults to <controlDir>/baseline')
+  .option('--scenarios <list>', 'Comma-separated scenario names to run. Default: all discovered scenarios')
+  .option('--skip-build', 'Skip npm run build for all runs (reuse existing out/ bundle)', false)
+  .option('--timeout <ms>', 'Max ms per scenario render. Default 180000', '180000')
+  .option('--headed', 'Run Playwright in headed mode for debugging', false)
+  .option('--update-baselines', 'Write/overwrite baseline PNGs instead of diffing', false)
+  .option('--diff-threshold <0..1>', 'Pixel-diff ratio threshold. Default 0.005 (0.5%)', '0.005')
+  .action(async (positional: string | undefined, opts) => {
+    const hasPath = typeof opts.path === 'string' && opts.path.length > 0;
+    const hasPositional = typeof positional === 'string' && positional.length > 0;
+    if (hasPositional && hasPath) {
+      console.error('Error: positional [path] cannot be combined with --path.');
+      process.exit(2);
+    }
+
+    const controlPath = resolveLoopControlPath(hasPath ? opts.path : (hasPositional ? positional : undefined));
+    const outDir = path.resolve(opts.out);
+    fs.mkdirSync(outDir, { recursive: true });
+
+    const diffThreshold = Number(opts.diffThreshold);
+    try {
+      assertDiffThreshold(diffThreshold);
+    } catch (error: any) {
+      console.error(`Error: ${error?.message ?? String(error)}`);
+      process.exit(2);
+    }
+
+    const baselineDir = opts.baseline
+      ? path.resolve(opts.baseline)
+      : path.join(controlPath, 'baseline');
+    fs.mkdirSync(baselineDir, { recursive: true });
+
+    const selectedScenarios = parseScenarioFilter(opts.scenarios);
+    const scenarioNames = loadScenarioNamesForBatch(controlPath, findProjectRoot(controlPath), selectedScenarios);
+    const runs = scenarioNames.length > 0 ? scenarioNames : [null];
+
+    console.log(`\n  pcfworkbench batch`);
+    console.log(`  Control:   ${controlPath}`);
+    console.log(`  Out:       ${outDir}`);
+    console.log(`  Baseline:  ${baselineDir}`);
+    console.log(`  Scenarios: ${runs.length}${scenarioNames.length === 0 ? ' (default no-scenario render)' : ''}\n`);
+
+    const scenarioResults: BatchScenarioResult[] = [];
+    const usedSlugs = new Map<string, number>();
+    for (let i = 0; i < runs.length; i++) {
+      const scenarioName = runs[i];
+      const scenarioLabel = scenarioName ?? 'default';
+      const baseSlug = slugifyFileName(scenarioLabel);
+      const seen = usedSlugs.get(baseSlug) ?? 0;
+      usedSlugs.set(baseSlug, seen + 1);
+      const slug = seen === 0 ? baseSlug : `${baseSlug}-${seen + 1}`;
+      const scenarioOutDir = path.join(outDir, slug);
+      fs.mkdirSync(scenarioOutDir, { recursive: true });
+
+      const exitCode = await runLoop({
+        controlPath,
+        outDir: scenarioOutDir,
+        skipBuild: !!opts.skipBuild || i > 0,
+        timeoutMs: parseInt(opts.timeout, 10),
+        headed: !!opts.headed,
+        scenario: scenarioName ?? undefined,
+      });
+
+      const reportPath = path.join(scenarioOutDir, 'report.json');
+      const screenshotPath = path.join(scenarioOutDir, 'screenshot.png');
+      const report = safeReadJson(reportPath);
+      const runtimeStatus = (report?.summary?.status === 'pass' || report?.summary?.status === 'warn' || report?.summary?.status === 'fail')
+        ? report.summary.status as 'pass' | 'warn' | 'fail'
+        : exitCode === 0 ? 'pass' : 'fail';
+      const headline = typeof report?.summary?.headline === 'string'
+        ? report.summary.headline
+        : 'loop run completed';
+
+      const baselinePath = path.join(baselineDir, `${slug}.png`);
+      let compared = false;
+      let updatedBaseline = false;
+      let diffRatio: number | null = null;
+      let diffPath: string | null = null;
+      let regression = false;
+      let visualError: string | null = null;
+
+      if (fs.existsSync(screenshotPath)) {
+        if (opts.updateBaselines) {
+          fs.copyFileSync(screenshotPath, baselinePath);
+          updatedBaseline = true;
+        } else if (fs.existsSync(baselinePath)) {
+          compared = true;
+          try {
+            const diff = diffPngBuffers(
+              fs.readFileSync(baselinePath),
+              fs.readFileSync(screenshotPath),
+            );
+            diffRatio = diff.diffRatio;
+            if (diff.diffRatio > diffThreshold) {
+              regression = true;
+              diffPath = path.join(scenarioOutDir, 'diff.png');
+              fs.writeFileSync(diffPath, diff.diffPng);
+            }
+          } catch (error: any) {
+            visualError = error?.message ?? String(error);
+            regression = true;
+          }
+        } else {
+          visualError = `baseline missing: ${baselinePath}`;
+        }
+      } else {
+        visualError = `screenshot missing: ${screenshotPath}`;
+        regression = true;
+      }
+
+      scenarioResults.push({
+        scenario: scenarioLabel,
+        outputDir: scenarioOutDir,
+        reportPath,
+        screenshotPath: fs.existsSync(screenshotPath) ? screenshotPath : null,
+        status: runtimeStatus,
+        headline,
+        visual: {
+          baselinePath: fs.existsSync(baselinePath) ? baselinePath : null,
+          compared,
+          updatedBaseline,
+          diffRatio,
+          threshold: compared ? diffThreshold : null,
+          diffPath,
+          regression,
+          error: visualError,
+        },
+      });
+    }
+
+    const batchReport = buildBatchReport({
+      controlPath,
+      outDir,
+      baselineDir,
+      thresholds: { diffThreshold },
+      scenarios: scenarioResults,
+    });
+    fs.writeFileSync(path.join(outDir, 'batch-report.json'), JSON.stringify(batchReport, null, 2));
+    fs.writeFileSync(path.join(outDir, 'batch-summary.md'), toBatchSummaryMarkdown(batchReport));
+
+    const failed = batchReport.summary.failed > 0;
+    console.log(`  [summary] ${failed ? 'FAIL' : 'PASS'} — ${batchReport.summary.passed}/${batchReport.summary.total} passed, ${batchReport.summary.visualRegressions} visual regression(s)`);
+    console.log(`  [report]  ${path.join(outDir, 'batch-report.json')}`);
+    console.log(`  [summary] ${path.join(outDir, 'batch-summary.md')}\n`);
+
+    process.exit(failed ? 1 : 0);
+  });
+
 program.parse();
 
 /* ---------------------------------------------------------------- */
@@ -351,6 +514,119 @@ function evaluateBudget(harnessReport: any, budget: PerfBudget, source: string |
 }
 
 /* ---------------------------------------------------------------- */
+
+function resolveLoopControlPath(inputPath: string | undefined): string {
+  if (typeof inputPath === 'string' && inputPath.length > 0) {
+    const resolved = path.resolve(inputPath);
+    assertControlDir(resolved);
+    return resolved;
+  }
+
+  const input = process.cwd();
+  try {
+    const target = resolvePcfTarget(input);
+    if (target.kind !== 'control') {
+      console.error(
+        `\n  Error: ${target.path} looks like a workspace (${target.controls.length} controls). ` +
+          `'loop' and 'batch' target a single control — pass the control directory explicitly:\n` +
+          `       pcfworkbench loop ./${target.controls[0] ?? 'MyControl'}\n`,
+      );
+      process.exit(2);
+    }
+    console.log(`[pcfworkbench] control: ${target.path}  (auto-detected from cwd)`);
+    return target.path;
+  } catch (e: any) {
+    if (e instanceof ResolveTargetError) {
+      console.error(`\n  Error: ${e.message}\n`);
+      console.error(`  Tip: cd into a PCF control directory and re-run, or pass a path explicitly:`);
+      console.error(`       pcfworkbench loop ./MyControl\n`);
+      process.exit(1);
+    }
+    throw e;
+  }
+}
+
+interface BatchScenarioConfig {
+  name: string;
+  skipInBatch: boolean;
+}
+
+function parseScenarioFilter(input: unknown): Set<string> | null {
+  if (typeof input !== 'string' || input.trim().length === 0) return null;
+  const names = input
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean);
+  return names.length > 0 ? new Set(names) : null;
+}
+
+function loadScenarioNamesForBatch(
+  controlPath: string,
+  projectRoot: string,
+  selected: Set<string> | null,
+): string[] {
+  const file = locateScenariosFile(controlPath, projectRoot);
+  if (!file) return [];
+
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const scenarios = parseScenarios(raw);
+    const filtered = scenarios
+      .filter(s => !s.skipInBatch)
+      .map(s => s.name)
+      .filter(name => selected ? selected.has(name) : true);
+    return [...new Set(filtered)];
+  } catch (error: any) {
+    console.warn(`[pcfworkbench batch] failed to read scenarios from ${file}: ${error?.message ?? String(error)}`);
+    return [];
+  }
+}
+
+function locateScenariosFile(controlPath: string, projectRoot: string): string | null {
+  for (const candidate of [
+    path.join(controlPath, 'test-scenarios.json'),
+    path.join(projectRoot, 'test-scenarios.json'),
+  ]) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function parseScenarios(raw: unknown): BatchScenarioConfig[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+      .map(entry => ({
+        name: typeof entry.name === 'string' ? entry.name : '',
+        skipInBatch: entry.skipInBatch === true,
+      }))
+      .filter(entry => entry.name.length > 0);
+  }
+
+  if (typeof raw === 'object' && raw !== null && Array.isArray((raw as any).scenarios)) {
+    return parseScenarios((raw as any).scenarios);
+  }
+
+  return [];
+}
+
+function slugifyFileName(name: string): string {
+  const normalized = name.trim().toLowerCase();
+  const slug = normalized
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return slug.length > 0 ? slug : 'scenario';
+}
+
+function safeReadJson(filePath: string): any | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
 
 function assertControlDir(controlPath: string): void {
   const inputManifest = path.join(controlPath, 'ControlManifest.Input.xml');
