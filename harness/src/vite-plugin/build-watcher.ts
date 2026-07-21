@@ -44,6 +44,16 @@ export interface BuildWatcherOptions {
 
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.css', '.resx', '.json']);
 const SOURCE_BASENAMES = new Set(['ControlManifest.Input.xml']);
+// Harness fixture / config files that live in the control dir but are NOT
+// control source — changing them must NOT trigger a pcf-scripts rebuild
+// (they're served live by the Vite plugin instead).
+const HARNESS_CONFIG_BASENAMES = new Set([
+  'data.json',
+  'test-scenarios.json',
+  'metadata.json',
+  'execute-mocks.json',
+  '.pcf-audit.json',
+]);
 
 const IGNORE_DIRS = new Set([
   'out',
@@ -147,6 +157,7 @@ export class BuildWatcher {
     if (segs.some((s) => IGNORE_DIRS.has(s))) return false;
     const base = segs[segs.length - 1];
     if (base.endsWith('.d.ts')) return false;
+    if (HARNESS_CONFIG_BASENAMES.has(base)) return false;
     if (SOURCE_BASENAMES.has(base)) return true;
     const ext = path.extname(base).toLowerCase();
     return SOURCE_EXTS.has(ext);
