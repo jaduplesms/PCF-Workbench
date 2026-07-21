@@ -67,7 +67,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "axe-core": "^4.12.1",
     "chokidar": "^5.0.0",
-    "commander": "^12.1.0",
+    "commander": "^15.0.0",
     "esbuild": "^0.28.1",
     "fast-xml-parser": "^5.7.0",
     "html2canvas": "^1.4.1",
