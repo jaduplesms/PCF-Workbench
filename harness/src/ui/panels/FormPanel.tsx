@@ -124,6 +124,31 @@ const useStyles = makeStyles({
     minWidth: 0,
     flex: '1 1 auto',
   },
+  attrLabel: {
+    fontSize: '12px',
+    fontWeight: tokens.fontWeightSemibold,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+    flex: '0 1 auto',
+  },
+  attrLogical: {
+    fontFamily: 'Consolas, monospace',
+    fontSize: '10px',
+    color: tokens.colorNeutralForeground4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+    flex: '1 1 auto',
+  },
+  attrFormatted: {
+    fontSize: '11px',
+    color: tokens.colorNeutralForeground3,
+    fontStyle: 'italic',
+    flexShrink: 0,
+  },
   attrType: {
     fontSize: '10px',
     color: tokens.colorNeutralForeground3,
@@ -363,16 +388,38 @@ function buildLookupItems(): SearchPickerItem<{ entityType: string; id: string; 
 }
 
 function LookupEditor({ attr }: { attr: AttributeState }): JSX.Element {
-  const items = buildLookupItems();
+  const all = buildLookupItems();
+  // Scope to the lookup's target entity when we know it (from the record's
+  // lookuplogicalname annotation or metadata); otherwise search every table.
+  let items = attr.lookupTarget ? all.filter(i => i.raw.entityType === attr.lookupTarget) : all;
   const currentId = attr.value == null ? '' : String(attr.value);
+  // The record's FormattedValue is the authoritative display name for the
+  // current value (e.g. "WO-00047"). Ensure the picker shows it even when the
+  // target record has no resolvable primary-name column, or no mock row at all.
+  if (currentId && attr.formattedValue) {
+    const idx = items.findIndex(i => i.value === currentId);
+    if (idx >= 0) {
+      items = items.map((it, i) => (i === idx ? { ...it, text: attr.formattedValue! } : it));
+    } else {
+      items = [{
+        value: currentId,
+        text: attr.formattedValue,
+        secondary: attr.lookupTarget ? `${attr.lookupTarget} · ${currentId}` : currentId,
+        group: attr.lookupTarget,
+        raw: { entityType: attr.lookupTarget ?? '', id: currentId, name: attr.formattedValue },
+      }, ...items];
+    }
+  }
   const current = items.find(i => i.value === currentId);
-  const placeholder = current ? current.text : (currentId ? currentId : 'Pick a record…');
+  const placeholder = current ? current.text : (attr.formattedValue ?? (currentId || 'Pick a record…'));
   return (
     <SearchPicker
       items={items}
       activeValue={currentId || null}
       placeholder={placeholder}
-      unfetchedMessage="No mock records — add tables in the Data tab."
+      unfetchedMessage={attr.lookupTarget
+        ? `No mock ${attr.lookupTarget} records — add them in the Data tab.`
+        : 'No mock records — add tables in the Data tab.'}
       onSelect={(item) => setAttributeValue(attr.name, item.value)}
       size="small"
       testIdPrefix={`fp-attr-${attr.name}`}
@@ -566,9 +613,16 @@ export function FormPanel(): JSX.Element {
               data-test-id={`fp-attr-${a.name}`}
             >
               <div className={styles.attrTop}>
-                <span className={styles.attrName} title={`${a.name} — column name on the record`}>
-                  {a.name}
-                </span>
+                {a.displayName && a.displayName !== a.name ? (
+                  <>
+                    <span className={styles.attrLabel} title={a.displayName}>{a.displayName}</span>
+                    <span className={styles.attrLogical} title={`${a.name} — logical column name`}>{a.name}</span>
+                  </>
+                ) : (
+                  <span className={styles.attrName} title={`${a.name} — column name on the record`}>
+                    {a.name}
+                  </span>
+                )}
                 <span className={styles.attrType} title="Field type — determines what values are accepted">
                   {a.attributeType}
                 </span>
@@ -582,6 +636,11 @@ export function FormPanel(): JSX.Element {
                   onTextChange={(v) => setEditing(prev => ({ ...prev, [a.name]: v }))}
                   onTextCommit={commitText}
                 />
+                {a.formattedValue && a.attributeType !== 'lookup' && (
+                  <span className={styles.attrFormatted} title="Friendly value (from the record's FormattedValue annotation)">
+                    {a.formattedValue}
+                  </span>
+                )}
               </div>
             </div>
           );

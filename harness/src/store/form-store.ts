@@ -31,6 +31,16 @@ export interface AttributeState {
   maxLength?: number;
   // options for optionsets
   options?: Array<{ value: number; text: string }>;
+  /** Friendly display label for the field (from metadata, else a humanised
+   *  logical name). Shown in the Form panel instead of the raw logical name. */
+  displayName?: string;
+  /** For lookup fields: the target entity logical name (from the record's
+   *  `@Microsoft.Dynamics.CRM.lookuplogicalname` annotation or metadata). */
+  lookupTarget?: string;
+  /** Friendly current value (from the record's
+   *  `@OData.Community.Display.V1.FormattedValue` annotation) — e.g. the option
+   *  label or the lookup's display name, so the UI needn't resolve a GUID. */
+  formattedValue?: string;
 }
 
 export interface ControlNotification {
@@ -180,6 +190,38 @@ function mapMetadataAttrType(dvType?: string): string {
   }
 }
 
+/** OData annotation suffixes present on mock/live records. */
+const FORMATTED_VALUE_SUFFIX = '@OData.Community.Display.V1.FormattedValue';
+const LOOKUP_LOGICALNAME_SUFFIX = '@Microsoft.Dynamics.CRM.lookuplogicalname';
+
+/** Turn a logical name into a friendly label as a fallback when metadata has no
+ *  display name. `msdyn_bookingmethod` → "Booking Method", `_x_value` handled by
+ *  the caller (stripped first). Best-effort only; metadata display names win. */
+function humanizeLogicalName(logical: string): string {
+  let s = logical;
+  // Strip a publisher prefix like `msdyn_`, `jdp_`, `new_` (but not a bare word).
+  const us = s.indexOf('_');
+  if (us > 0 && us <= 8 && us < s.length - 1) s = s.slice(us + 1);
+  s = s.replace(/id$/i, '').replace(/[_]+/g, ' ').trim();
+  if (!s) return logical;
+  // Split camelCase and title-case each word.
+  return s
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Prefer a real metadata display name; fall back to a humanised logical name
+ *  when metadata is absent OR the "display name" is just the logical name
+ *  (Dataverse returns the logical name for columns with no localized label,
+ *  e.g. denormalised `*name` columns). */
+function resolveDisplayName(colName: string, metaDisplayName?: string | null): string {
+  return metaDisplayName && metaDisplayName !== colName
+    ? metaDisplayName
+    : humanizeLogicalName(colName);
+}
+
 function inferAttrType(value: any, ofType?: string): string {
   if (ofType) {
     const t = ofType.toLowerCase();
@@ -241,20 +283,31 @@ export function seedFormState(
     for (const [key, raw] of Object.entries(active)) {
       // Skip OData annotation keys (foo@OData.Community.Display.V1.FormattedValue)
       if (key.includes('@')) continue;
-      const attrName = key.startsWith('_') && key.endsWith('_value')
-        ? key.slice(1, -'_value'.length)
-        : key;
+      const isLookupValue = key.startsWith('_') && key.endsWith('_value');
+      const attrName = isLookupValue ? key.slice(1, -'_value'.length) : key;
       const metaCol = entityMeta?.columns[attrName];
       const metaType = metaCol?.type;
+      // Read the OData annotations that sit alongside this key. They encode the
+      // lookup target entity and the friendly display value the platform would
+      // otherwise resolve for us — no metadata.json required.
+      const formattedValue = active[`${key}${FORMATTED_VALUE_SUFFIX}`];
+      const lookupTarget = active[`${key}${LOOKUP_LOGICALNAME_SUFFIX}`];
+      let attributeType = metaType ? mapMetadataAttrType(metaType) : inferAttrType(raw);
+      // The `_x_value` convention is definitive: it's a lookup even when no
+      // metadata is present and the raw value is just a GUID string.
+      if (isLookupValue) attributeType = 'lookup';
       addAttributeInternal({
         name: attrName,
         value: raw,
         initialValue: raw,
         requiredLevel: 'none',
-        attributeType: metaType ? mapMetadataAttrType(metaType) : inferAttrType(raw),
+        attributeType,
         isDirty: false,
         submitMode: 'dirty',
         options: metaCol?.options,
+        displayName: resolveDisplayName(attrName, metaCol?.displayName ?? findColumnLabelAcrossEntities(attrName)),
+        lookupTarget: typeof lookupTarget === 'string' ? lookupTarget : undefined,
+        formattedValue: formattedValue != null ? String(formattedValue) : undefined,
       });
     }
   }
@@ -277,6 +330,7 @@ export function seedFormState(
         isDirty: false,
         submitMode: 'dirty',
         options: col.options,
+        displayName: resolveDisplayName(colName, col.displayName),
       });
     }
   }
@@ -302,6 +356,7 @@ export function seedFormState(
         isDirty: false,
         submitMode: 'dirty',
         options: col.options,
+        displayName: resolveDisplayName(colName, col.displayName),
       });
     }
   }
