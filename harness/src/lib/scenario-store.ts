@@ -773,12 +773,16 @@ export function applyScenarioToStore(scenario: TestScenario): void {
 
   if (scenario.isControlDisabled !== undefined) s.setControlDisabled(scenario.isControlDisabled);
 
-  // Data source — honour scenario's pinned mode (P3). Switching to live is
-  // safe even without a profile: the live web-api branch surfaces a clean
-  // "Live mode requires a selected PAC profile" error instead of silently
-  // failing, and the LiveModeControls UI guides the user to pick one.
-  if (scenario.dataSource !== undefined && scenario.dataSource !== s.dataSource) {
-    s.setDataSource(scenario.dataSource);
+  // Data source — honour scenario's pinned mode (P3). Absent ⇒ mock (M16
+  // Phase 0 determinism): a persisted `live` from a previous scenario must
+  // NOT leak onto a scenario that doesn't opt into live, or the dv-proxy
+  // will silently keep serving live data (the InfoCard bug). Switching to
+  // live is safe even without a profile: the live web-api branch surfaces
+  // a clean "Live mode requires a selected PAC profile" error instead of
+  // silently failing, and the LiveModeControls UI guides the user to pick one.
+  const targetDataSource: 'mock' | 'live' = scenario.dataSource ?? 'mock';
+  if (targetDataSource !== s.dataSource) {
+    s.setDataSource(targetDataSource);
   }
 
   // Live profile pin — match by orgUrl (durable) first, then friendlyName as
