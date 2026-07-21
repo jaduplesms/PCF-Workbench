@@ -7,12 +7,15 @@ import os from 'node:os';
 import { URL } from 'node:url';
 
 import * as liveCache from './live-cache';
+import { dedupeAppMetadata } from './msal-cache-repair';
 
 import {
   PublicClientApplication,
   type AccountInfo,
   type AuthenticationResult,
   type Configuration,
+  type ICachePlugin,
+  type TokenCacheContext,
   InteractionRequiredAuthError,
 } from '@azure/msal-node';
 import {
@@ -97,7 +100,7 @@ function loadProfiles(): ProfileSnapshot {
   if (!fs.existsSync(file)) {
     throw new ProxyError(
       'pac-not-found',
-      `PAC profile file not found at ${file}. Install PAC CLI and run \`pac auth create --url <orgUrl>\`.`,
+      `PAC profile file not found at ${file}. Install PAC CLI and run \`pac auth create -env <orgUrl>\`.`,
     );
   }
   let raw: string;
@@ -171,7 +174,7 @@ async function inspectCache(): Promise<CacheInspection> {
   if (!fs.existsSync(cachePath)) {
     throw new ProxyError(
       'pac-no-cache',
-      `PAC token cache not found at ${cachePath}. Run \`pac auth create --url <orgUrl>\` first.`,
+      `PAC token cache not found at ${cachePath}. Run \`pac auth create -env <orgUrl>\` first.`,
     );
   }
   const persistence = await PersistenceCreator.createPersistence({
@@ -192,7 +195,7 @@ async function inspectCache(): Promise<CacheInspection> {
     );
   }
   if (!raw) {
-    throw new ProxyError('pac-no-cache', 'PAC token cache is empty. Run `pac auth create --url <orgUrl>`.');
+    throw new ProxyError('pac-no-cache', 'PAC token cache is empty. Run `pac auth create -env <orgUrl>`.');
   }
 
   let cache: any;
@@ -233,9 +236,30 @@ async function inspectCache(): Promise<CacheInspection> {
 /** Per-PCA cache so we don't keep rebuilding MSAL for the same (clientId, authority).
  *  Keyed by `${clientId}|${authority}`. */
 const pcaCache = new Map<string, PublicClientApplication>();
-let cachePluginPromise: Promise<PersistenceCachePlugin> | null = null;
+let cachePluginPromise: Promise<ICachePlugin> | null = null;
 
-async function getCachePlugin(): Promise<PersistenceCachePlugin> {
+/** Wraps an inner cache plugin (PersistenceCachePlugin) and sanitizes the
+ *  deserialized cache before MSAL reads it. The repair happens in-memory: the
+ *  on-disk `.dat` is only rewritten if MSAL itself mutates the cache
+ *  (`cacheHasChanged`), in which case the inner plugin persists the cleaned
+ *  copy — so a corrupt cache self-heals on the next token write rather than
+ *  being destructively edited behind the user's back. */
+class SanitizingCachePlugin implements ICachePlugin {
+  constructor(private readonly inner: ICachePlugin) {}
+
+  async beforeCacheAccess(ctx: TokenCacheContext): Promise<void> {
+    await this.inner.beforeCacheAccess(ctx);
+    const serialized = ctx.tokenCache.serialize();
+    const cleaned = dedupeAppMetadata(serialized);
+    if (cleaned !== serialized) ctx.tokenCache.deserialize(cleaned);
+  }
+
+  async afterCacheAccess(ctx: TokenCacheContext): Promise<void> {
+    await this.inner.afterCacheAccess(ctx);
+  }
+}
+
+async function getCachePlugin(): Promise<ICachePlugin> {
   if (!cachePluginPromise) {
     cachePluginPromise = (async () => {
       const persistence = await PersistenceCreator.createPersistence({
@@ -245,7 +269,7 @@ async function getCachePlugin(): Promise<PersistenceCachePlugin> {
         accountName: 'MSALCache',
         usePlaintextFileOnLinux: false,
       });
-      return new PersistenceCachePlugin(persistence);
+      return new SanitizingCachePlugin(new PersistenceCachePlugin(persistence));
     })();
   }
   return cachePluginPromise;
@@ -301,6 +325,35 @@ async function findAccountForProfile(
   );
 }
 
+/** `acquireTokenSilent`, but resilient to PAC's duplicated access-token cache.
+ *
+ *  PAC's MSAL cache accumulates duplicate AccessToken entries after repeated
+ *  `pac auth create` runs against the same org. The default silent flow reads
+ *  the access-token cache first and throws `multiple_matching_tokens` when it
+ *  finds more than one. `pac auth clear` removes PAC *profiles* but leaves
+ *  those token entries behind, so it doesn't help — which is why the old
+ *  "run `pac auth clear`" message was misleading.
+ *
+ *  `forceRefresh: true` skips the access-token cache lookup entirely and mints
+ *  a fresh token from the refresh token, sidestepping the duplicates without
+ *  any manual cleanup. We only pay that network round-trip on the retry path,
+ *  so the happy path stays cache-fast. */
+async function acquireSilentResilient(
+  pca: PublicClientApplication,
+  account: AccountInfo,
+  scopes: string[],
+): Promise<AuthenticationResult | null> {
+  try {
+    return await pca.acquireTokenSilent({ account, scopes });
+  } catch (e) {
+    if (isMsalCacheCorruptError(e)) {
+      // Bypass the ambiguous AT cache; use the refresh token to get a fresh one.
+      return await pca.acquireTokenSilent({ account, scopes, forceRefresh: true });
+    }
+    throw e;
+  }
+}
+
 /** Acquires a Dataverse access token for the supplied org URL using PAC's
  *  cached account. Throws `ProxyError('pac-reauth-required')` if MSAL needs
  *  interaction we cannot provide. */
@@ -315,7 +368,7 @@ export async function acquireDataverseToken(orgUrl: string): Promise<{
   if (!profile) {
     throw new ProxyError(
       'pac-profile-missing',
-      `No PAC profile found for ${orgUrl}. Run \`pac auth create --url ${orgUrl}\`.`,
+      `No PAC profile found for ${orgUrl}. Run \`pac auth create -env ${orgUrl}\`.`,
       { org: orgUrl },
     );
   }
@@ -325,27 +378,34 @@ export async function acquireDataverseToken(orgUrl: string): Promise<{
   if (!account) {
     throw new ProxyError(
       'pac-reauth-required',
-      `PAC cache has a profile for ${orgUrl} but no matching MSAL account. Run \`pac auth create --url ${orgUrl}\`.`,
+      `PAC cache has a profile for ${orgUrl} but no matching MSAL account. Run \`pac auth create -env ${orgUrl}\`.`,
       { org: orgUrl },
     );
   }
   const scopes = [`${normalizeOrgUrl(orgUrl)}/user_impersonation`];
   let result: AuthenticationResult | null;
   try {
-    result = await pca.acquireTokenSilent({ account, scopes });
+    result = await acquireSilentResilient(pca, account, scopes);
   } catch (e) {
     if (e instanceof InteractionRequiredAuthError) {
       throw new ProxyError(
         'pac-reauth-required',
-        `Refresh token expired for ${orgUrl}. Run \`pac auth create --url ${orgUrl}\`.`,
+        `Refresh token expired for ${orgUrl}. Run \`pac auth create -env ${orgUrl}\`.`,
         { org: orgUrl },
       );
     }
     if (isMsalCacheCorruptError(e)) {
+      // We already retried with forceRefresh inside acquireSilentResilient, so
+      // reaching here means even the refresh-token path is ambiguous — a
+      // genuinely corrupt cache. `pac auth clear` won't fix this (it leaves the
+      // MSAL token cache behind); the user must delete the MSAL cache file.
+      const code = (e as { errorCode?: string }).errorCode;
       throw new ProxyError(
         'pac-cache-corrupt',
-        `PAC token cache has duplicate entries for ${orgUrl}. Run \`pac auth clear\` then \`pac auth create --url ${orgUrl}\`.`,
-        { org: orgUrl, msalCode: (e as { errorCode?: string }).errorCode },
+        `The MSAL token cache for ${orgUrl} has duplicate entries that re-authentication did not resolve (MSAL: ${code ?? 'unknown'}). ` +
+          `\`pac auth clear\` does not fix this because it leaves the MSAL token cache in place. ` +
+          `Close all PAC processes, delete the cache file at ${pacTokenCachePath()}, then run \`pac auth create -env ${orgUrl}\`.`,
+        { org: orgUrl, msalCode: code, cachePath: pacTokenCachePath() },
       );
     }
     throw new ProxyError(
