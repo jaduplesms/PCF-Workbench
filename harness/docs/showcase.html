@@ -2683,6 +2683,45 @@ Perf:   firstUpdateView: 180ms ·
           <li><strong>P2 &mdash; Form-interaction drawer:</strong> render the form fields as a UCI-style drawer in the viewport around the control; switch the visual-regression capture from <code>fullPage</code> to the control element so chrome/drawers never pollute a baseline; drawer defaults closed</li>
           <li><strong>P3 &mdash; User identity avatar:</strong> top-right avatar flyout to switch the current user from <code>systemuser</code> personas and toggle their security roles (feeds <code>userSettings</code> / <code>getUserRoles()</code>)</li>
           <li><strong>P4 &mdash; Side-pane rail regroup:</strong> group the right rail into <strong>Setup</strong> (Properties, Data), <strong>Analysis</strong> (Activity = lifecycle + WebAPI + console, Reports = performance/audit/coverage), and <strong>Personalisation</strong> (language, time zone, formats, RTL); move Device form-factor to a bottom-right canvas control; retire the old User/gear tabs into their new homes</li>
+          <li><strong>P5 &mdash; Form field curation:</strong> a real record has too many fields to show flat. Categorise &amp; sort attributes (e.g. Identity, Lookups, Option sets, Dates, Numbers, Text, System); collapse noisy/system groups by default; offer a <strong>start-empty</strong> mode where you add only the fields you want to drive; and optionally <strong>source the field list from an existing form</strong> (form XML) so the harness form mirrors a real one</li>
+        </ul>
+      </div>
+
+      <div class="milestone-card next">
+        <div class="milestone-h">
+          <h3><span class="milestone-num">M15</span>Metadata Snapshot</h3>
+          <div class="milestone-pills">
+            <span class="milestone-size size-m">M</span>
+            <span class="milestone-pill pill-next">Up next</span>
+          </div>
+        </div>
+        <p class="ms-desc">Make real schema a <strong>first-class, first-run</strong> concern &mdash; a control isn't representative without it. Capture <em>real</em> Dataverse entity metadata from a connected org into a local <code>metadata.json</code> (independently of snapshotting live data records) so mock scenarios render with full fidelity (option-set dropdowns, datetime pickers, exact field labels) without hand-authoring or guessing schema. Complements M14.P1's annotation-driven inference, which already covers lookups, labels and current values with no live org. A working prototype script exists at <code>harness/scripts/snapshot-metadata.ts</code> (reuses PAC auth).</p>
+        <ul class="milestone-list">
+          <li><strong>First-run wizard step:</strong> when opening a control with no metadata, offer <strong>(1) Connect to an existing environment</strong> to extract metadata + sample test records (preferred), or <strong>(2) Generate &amp; infer schema</strong> from mock data/annotations (explicitly the non-preferred fallback)</li>
+          <li>Load metadata <strong>before</strong> first render so types/labels/options are correct on the very first paint</li>
+          <li>One-click <strong>Snapshot metadata</strong> from a <code>pac auth</code>-connected org, separate from the data snapshot</li>
+          <li>Pull attribute types, option-set option lists, boolean labels, display names, primary id/name attributes, and lookup targets (via casted <code>EntityDefinitions</code> queries)</li>
+          <li>Scope to entities referenced by the current scenario's mock data + their lookup targets (avoid dragging the whole org schema)</li>
+          <li>Merge into the control's <code>metadata.json</code> without clobbering unrelated entities; offline-fast reruns via the existing response cache; must NOT trigger a PCF rebuild</li>
+          <li>Visual indicator of metadata provenance (snapshotted vs inferred) so it's clear which fields are schema-backed</li>
+        </ul>
+      </div>
+
+      <div class="milestone-card next">
+        <div class="milestone-h">
+          <h3><span class="milestone-num">M16</span>Unified Data &amp; Metadata Access Layer</h3>
+          <div class="milestone-pills">
+            <span class="milestone-size size-l">L</span>
+            <span class="milestone-pill pill-next">Up next</span>
+          </div>
+        </div>
+        <p class="ms-desc">Make live-vs-mock a single seam at the data layer so every feature (Form seeding, lookups, webAPI shim, DataPanel, metadata) is source-agnostic &mdash; it asks a provider, the provider routes to the local store or the live org. Reads already route through <code>data-store.getEntityData</code> and metadata shares one store; this milestone removes the remaining hand-written per-feature branches (esp. the 5 CRUD branches in <code>web-api.ts</code>) and makes metadata ride the same seam.</p>
+        <ul class="milestone-list">
+          <li><strong>Phase 0 &mdash; determinism:</strong> <code>applyScenarioToStore</code> always sets <code>dataSource</code> (absent ⇒ mock) so a stale persisted <code>live</code> can't leak onto a mock scenario (the InfoCard dv-proxy bug)</li>
+          <li><strong>Phase 1:</strong> extract <code>records</code> + <code>metadata</code> provider interfaces wrapping today's mock (<code>data-store</code>/mock OData) and live (<code>dv-client</code>) impls; route once by <code>dataSource</code>; no behaviour change</li>
+          <li><strong>Phase 2:</strong> migrate <code>web-api.ts</code> CRUD (createRecord:448, deleteRecord:503, updateRecord:554, retrieveRecord:612, retrieveMultipleRecords:721) onto <code>records</code>; add <code>ensureMetadata(entity)</code> that Form seeding + lookups call so schema is present in both modes</li>
+          <li><strong>Phase 3:</strong> re-seed the form on <code>dataVersion</code> so live page-record arrivals refresh it; surface data provenance (mock vs live, snapshotted vs inferred)</li>
+          <li>Network-conditioning stays a decorator on top of the provider (online/offline latency independent of source)</li>
         </ul>
       </div>
 
