@@ -38,7 +38,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install Linux system deps (libsecret for keytar)
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev
