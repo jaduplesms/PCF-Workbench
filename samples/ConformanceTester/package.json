@@ -29,7 +29,7 @@
     "pcf-scripts": "^1",
     "pcf-start": "^1",
     "react": "^16.14.0",
-    "typescript": "^5.8.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "8.62.0"
   }
 }
