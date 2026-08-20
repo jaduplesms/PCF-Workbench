@@ -16,6 +16,17 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    # React 19 is a deliberate migration: React and ReactDOM must move
+    # together, and the current split group updates cannot resolve peers.
+    ignore:
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /samples/ConformanceTester

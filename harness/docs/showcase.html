@@ -2509,29 +2509,29 @@ Perf:   firstUpdateView: 180ms ·
   </div>
 </section>
 
-<!-- ── In Planning ─── -->
+<!-- ── Quality foundations ─── -->
 <section class="section" style="padding-top:32px">
   <div class="container">
     <div class="section-header reveal">
-      <h2>What's next</h2>
-      <p>Locking down foundations after the M3 closeout &mdash; unit-test hardening, reusable CI packaging, and the next quality gates.</p>
+      <h2>Quality foundations</h2>
+      <p>Unit-test hardening and reusable CI packaging that lock down the shipped platform.</p>
     </div>
     <div class="milestone-grid reveal">
 
-      <div class="milestone-card next">
+      <div class="milestone-card shipped">
         <div class="milestone-h">
           <h3><span class="milestone-num">M11</span>Unit Tests for Pure-Logic Modules</h3>
           <div class="milestone-pills">
             <span class="milestone-size size-s">S</span>
-            <span class="milestone-pill pill-next">Up next</span>
+            <span class="milestone-pill pill-shipped">Shipped</span>
           </div>
         </div>
-        <p class="ms-desc">Stand up Vitest inside <code>harness/</code> and write unit tests for the five modules where Playwright E2E coverage is expensive or impossible to reach: <code>scenario-store</code> (v1&rarr;v2 migration), <code>manifest-parser</code> (XML edge cases), <code>web-api</code> OData parser, <code>date-rebase</code>, <code>data-store</code>. Catches silent regressions the Conformance Tester grid wasn't built to surface. <code>DESIGN.md</code> + <code>PLAN.md</code> already drafted &mdash; awaiting sign-off on 5 open questions.</p>
+        <p class="ms-desc">Vitest coverage for the five modules where Playwright E2E coverage is expensive or impossible to reach: <code>scenario-store</code> (v1&rarr;v2 migration), <code>manifest-parser</code> (XML edge cases), <code>web-api</code> OData parser, <code>date-rebase</code>, and <code>data-store</code>. The focused suite now locks down 176 behaviours in under 3 seconds.</p>
         <ul class="milestone-list">
-          <li>Vitest scaffold + canary test (<code>npm run test:run</code>)</li>
-          <li>~30&ndash;50 tests across 5 P1 modules; each has &ge; 1 explicit edge-case test</li>
-          <li>Coverage <em>reporting</em> only &mdash; no thresholds in P1 (premature gating)</li>
-          <li>Wired into CI alongside <code>typecheck</code>; runs in &lt;5s wall-clock locally</li>
+          <li class="done">Vitest scaffold + one-shot CI command (<code>npm run test:run</code>)</li>
+          <li class="done">176 focused tests across 5 P1 modules with explicit edge-case coverage</li>
+          <li class="done">Coverage <em>reporting</em> only &mdash; no premature thresholds</li>
+          <li class="done">Wired into CI alongside <code>typecheck</code>; runs in &lt;5s wall-clock locally</li>
         </ul>
       </div>
 
@@ -2557,12 +2557,12 @@ Perf:   firstUpdateView: 180ms ·
   </div>
 </section>
 
-<!-- ── Later ─── -->
+<!-- ── Next and later ─── -->
 <section class="section" style="background:var(--neutral-100);padding-top:32px">
   <div class="container">
     <div class="section-header reveal">
-      <h2>Later milestones</h2>
-      <p>Larger investments lined up after the next release. Roughly in the order they'd ship.</p>
+      <h2>What's next</h2>
+      <p>Field Service Mobile fidelity is next, followed by the larger extensibility investments.</p>
     </div>
     <div class="milestone-grid reveal">
 
@@ -2585,12 +2585,12 @@ Perf:   firstUpdateView: 180ms ·
         </ul>
       </div>
 
-      <div class="milestone-card later">
+      <div class="milestone-card next">
         <div class="milestone-h">
           <h3><span class="milestone-num">M5</span>Field Service Mobile / Offline Profiles</h3>
           <div class="milestone-pills">
             <span class="milestone-size size-m">M</span>
-            <span class="milestone-pill pill-later">Later</span>
+            <span class="milestone-pill pill-next">Up next</span>
           </div>
         </div>
         <p class="ms-desc">Simulate the mobile app's offline-profile semantics so FSM controls can be validated locally.</p>
