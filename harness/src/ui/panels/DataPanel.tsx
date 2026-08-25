@@ -8,10 +8,10 @@ import { ArrowClockwise24Regular, Save24Regular, Globe16Regular, ArrowDownload24
 import { useHarnessStore, type DataSource, type PublicProfile } from '../../store/harness-store';
 import {
   loadEntityData, getEntityStoreKeys, getEntityData,
-  deleteEntityTable, createEntityTable,
+  deleteEntityTable, createEntityTable, getMockEntityDataSnapshot,
 } from '../../store/data-store';
 import {
-  getAllMetadata, setEntityMetadata, deleteEntityMetadata,
+  getAllMetadata, setEntityMetadata, deleteEntityMetadata, loadMetadata,
   subscribeMetadata, getMetadataVersion, getEntityMetadata, getEntityDisplayName,
   type EntityMetadata,
 } from '../../store/metadata-store';
@@ -21,6 +21,10 @@ import { SearchPicker, type SearchPickerItem } from '../common/SearchPicker';
 import { loadAllScenarios, applyScenarioAsActive, captureAndSaveAsNewScenario } from '../../lib/scenario-store';
 import { isLiveBlocked, liveBlockReason } from '../../lib/live-block';
 import { DatasetBindingsBlock } from './DatasetBindingsBlock';
+import {
+  persistMetadataSnapshot,
+  snapshotDataverseMetadata,
+} from '../../lib/metadata-snapshot';
 
 const useStyles = makeStyles({
   root: {
@@ -787,6 +791,85 @@ function PendingLiveCaptureBanner() {
   );
 }
 
+function SnapshotMetadataButton() {
+  const liveProfile = useHarnessStore(s => s.liveProfile);
+  const connectionState = useHarnessStore(s => s.liveConnectionState);
+  const addLogEntry = useHarnessStore(s => s.addLogEntry);
+  const bumpDataVersion = useHarnessStore(s => s.bumpDataVersion);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const mockRecords = getMockEntityDataSnapshot();
+  const entityCount = Object.keys(mockRecords).length;
+
+  const capture = useCallback(async () => {
+    if (!liveProfile?.orgUrl || entityCount === 0) return;
+    setRunning(true);
+    setResult(null);
+    setError(null);
+    try {
+      const snapshot = await snapshotDataverseMetadata(liveProfile.orgUrl, mockRecords);
+      const merged = await persistMetadataSnapshot(snapshot);
+      loadMetadata(merged);
+      bumpDataVersion();
+      setResult(`Saved ${snapshot.value.length} snapshotted entities to metadata.json.`);
+      addLogEntry({
+        category: 'data',
+        method: 'metadata.snapshot.ok',
+        args: {
+          orgUrl: liveProfile.orgUrl,
+          requestedEntities: entityCount,
+          capturedEntities: snapshot.value.length,
+        },
+      });
+    } catch (e) {
+      const message = e instanceof DvProxyError
+        ? `${e.body.error}: ${e.body.message}`
+        : (e as Error).message;
+      setError(message);
+      addLogEntry({
+        category: 'data',
+        method: 'metadata.snapshot.error',
+        args: { orgUrl: liveProfile.orgUrl, message },
+      });
+    } finally {
+      setRunning(false);
+    }
+  }, [liveProfile, entityCount, mockRecords, bumpDataVersion, addLogEntry]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Button
+        appearance="primary"
+        size="small"
+        icon={running ? <Spinner size="tiny" /> : <ArrowDownload24Regular />}
+        onClick={() => void capture()}
+        disabled={running || connectionState !== 'connected' || entityCount === 0}
+        title={entityCount === 0
+          ? 'Add mock records to the current scenario first; they define the metadata scope.'
+          : `Snapshot real metadata for ${entityCount} scenario entity type(s) and their lookup targets`}
+        data-test-id="snapshot-metadata"
+      >
+        {running ? 'Snapshotting metadata…' : `Snapshot metadata (${entityCount})`}
+      </Button>
+      <div style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>
+        Uses the current scenario's mock entities and columns as the scope.
+        Existing unrelated metadata is preserved.
+      </div>
+      {result && (
+        <MessageBar intent="success" data-test-id="snapshot-metadata-success">
+          <MessageBarBody>{result}</MessageBarBody>
+        </MessageBar>
+      )}
+      {error && (
+        <MessageBar intent="error" data-test-id="snapshot-metadata-error">
+          <MessageBarBody>{error}</MessageBarBody>
+        </MessageBar>
+      )}
+    </div>
+  );
+}
+
 function LiveModeControls() {
   const liveProfile = useHarnessStore(s => s.liveProfile);
   const liveProfiles = useHarnessStore(s => s.liveProfiles);
@@ -1003,6 +1086,8 @@ function LiveModeControls() {
       )}
 
       <SnapshotLiveToMockButton />
+
+      <SnapshotMetadataButton />
 
       <LiveCachePanel />
 
@@ -1508,6 +1593,7 @@ export function DataPanel() {
     setEntityMetadata(name, {
       displayName: name,
       columns,
+      provenance: { kind: 'inferred' },
       primaryIdAttribute: guessedPk in columns ? guessedPk : Object.keys(columns)[0],
       primaryNameAttribute: 'name' in columns ? 'name' : Object.keys(columns)[0],
     });
@@ -1516,6 +1602,12 @@ export function DataPanel() {
     }
     addLogEntry({ category: 'data', method: 'generateSchema', args: { entity: name, columns: Object.keys(columns).length } });
   }, [tables, selectedEntity, editorMode, refreshEditor, addLogEntry]);
+
+  const handleGenerateAllSchemas = useCallback(() => {
+    for (const row of entityRows) {
+      if (row.hasData && !row.hasSchema) handleGenerateSchema(row.name);
+    }
+  }, [entityRows, handleGenerateSchema]);
 
   return (
     <div className={styles.root}>
@@ -1647,6 +1739,35 @@ export function DataPanel() {
             </div>
           )}
 
+          {tables.length > 0 && metadataEntries.length === 0 && loaded && (
+            <MessageBar intent="warning" data-test-id="metadata-first-run">
+              <MessageBarBody>
+                <strong>No entity metadata is loaded.</strong> For representative
+                controls, connect to an existing environment and snapshot the
+                real schema. If no environment is available, generate an inferred
+                schema from the current mock records.
+                <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                  <Button
+                    size="small"
+                    appearance="primary"
+                    onClick={() => setDataSource('live')}
+                    data-test-id="metadata-first-run-connect"
+                  >
+                    Connect to environment
+                  </Button>
+                  <Button
+                    size="small"
+                    appearance="secondary"
+                    onClick={handleGenerateAllSchemas}
+                    data-test-id="metadata-first-run-infer"
+                  >
+                    Generate inferred schema
+                  </Button>
+                </div>
+              </MessageBarBody>
+            </MessageBar>
+          )}
+
           {/* Unified entity list — one row per entity. Records and schema
               live together because they describe the same thing; you cannot
               meaningfully have one without the other. The editor below
@@ -1694,6 +1815,19 @@ export function DataPanel() {
                     )}
                     {row.name}
                   </span>
+                  {meta?.provenance && (
+                    <Badge
+                      appearance="outline"
+                      size="small"
+                      color={meta.provenance.kind === 'snapshot' ? 'success' : 'informative'}
+                      title={meta.provenance.kind === 'snapshot'
+                        ? `Snapshotted from ${meta.provenance.orgUrl ?? 'Dataverse'}${meta.provenance.capturedAt ? ` on ${meta.provenance.capturedAt}` : ''}`
+                        : `Metadata provenance: ${meta.provenance.kind}`}
+                      data-test-id={`metadata-provenance-${row.name}`}
+                    >
+                      {meta.provenance.kind === 'snapshot' ? 'snapshot' : meta.provenance.kind}
+                    </Badge>
+                  )}
                   <div className={styles.rowMeta}>
                     <span
                       className={`${styles.rowMetaItem} ${row.recordCount === 0 ? styles.rowMetaMuted : ''}`}

@@ -54,6 +54,50 @@ export interface ProxyErrorBody {
   meta?: Record<string, unknown>;
 }
 
+export function normalizeProxyErrorBody(
+  raw: unknown,
+  status: number,
+  statusText: string,
+): ProxyErrorBody {
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    if (typeof record.error === 'string') {
+      return {
+        error: record.error,
+        message: typeof record.message === 'string'
+          ? record.message
+          : `HTTP ${status} ${statusText}`,
+        meta: record.meta && typeof record.meta === 'object'
+          ? record.meta as Record<string, unknown>
+          : undefined,
+      };
+    }
+
+    const nested = record.error;
+    if (nested && typeof nested === 'object') {
+      const error = nested as Record<string, unknown>;
+      const rawMessage = error.message;
+      const message = typeof rawMessage === 'string'
+        ? rawMessage
+        : rawMessage && typeof rawMessage === 'object'
+          ? String((rawMessage as Record<string, unknown>).value ?? '')
+          : '';
+      return {
+        error: typeof error.code === 'string' && error.code
+          ? error.code
+          : 'dataverse-error',
+        message: message || `HTTP ${status} ${statusText}`,
+        meta: { upstream: error },
+      };
+    }
+  }
+
+  return {
+    error: 'upstream-error',
+    message: `HTTP ${status} ${statusText}`,
+  };
+}
+
 export class DvProxyError extends Error {
   constructor(
     public readonly status: number,
@@ -65,12 +109,13 @@ export class DvProxyError extends Error {
 }
 
 async function parseError(res: Response): Promise<DvProxyError> {
-  let body: ProxyErrorBody;
+  let raw: unknown;
   try {
-    body = (await res.json()) as ProxyErrorBody;
+    raw = await res.json();
   } catch {
-    body = { error: 'upstream-error', message: `HTTP ${res.status} ${res.statusText}` };
+    raw = null;
   }
+  const body = normalizeProxyErrorBody(raw, res.status, res.statusText);
   return new DvProxyError(res.status, body);
 }
 
@@ -688,7 +733,10 @@ export async function ensureLiveAttributeMetadata(orgUrl: string, logicalName: s
           if (pl?.OptionSet) attr.OptionSet = pl.OptionSet;
         }
       }
-      loadMetadata({ [logicalName]: entity });
+      loadMetadata({
+        source: { kind: 'live', orgUrl },
+        value: [entity],
+      });
       attrMetaLoaded.add(logicalName);
       useHarnessStore.getState().addLogEntry({
         category: 'webAPI',

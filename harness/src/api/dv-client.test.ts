@@ -12,11 +12,53 @@ import { describe, it, expect } from 'vitest';
 import {
   mapSavedQueryToView,
   mapUserQueryToView,
+  normalizeProxyErrorBody,
   sortAndDedupeViews,
   type RawSavedQuery,
   type RawUserQuery,
 } from './dv-client';
 import type { ViewDefinition } from '../types/dataset-binding';
+
+describe('normalizeProxyErrorBody', () => {
+  it('preserves the harness flat proxy error shape', () => {
+    expect(normalizeProxyErrorBody(
+      { error: 'pac-profile-missing', message: 'Profile not found', meta: { org: 'x' } },
+      401,
+      'Unauthorized',
+    )).toEqual({
+      error: 'pac-profile-missing',
+      message: 'Profile not found',
+      meta: { org: 'x' },
+    });
+  });
+
+  it('normalizes a Dataverse nested OData error', () => {
+    expect(normalizeProxyErrorBody(
+      {
+        error: {
+          code: '0x80060888',
+          message: "Could not find a property named 'DefaultValue'.",
+        },
+      },
+      400,
+      'Bad Request',
+    )).toMatchObject({
+      error: '0x80060888',
+      message: "Could not find a property named 'DefaultValue'.",
+    });
+  });
+
+  it('handles legacy OData message objects', () => {
+    expect(normalizeProxyErrorBody(
+      { error: { code: '', message: { lang: 'en-US', value: 'Invalid query' } } },
+      400,
+      'Bad Request',
+    )).toMatchObject({
+      error: 'dataverse-error',
+      message: 'Invalid query',
+    });
+  });
+});
 
 const SIMPLE_FETCH = `
 <fetch>

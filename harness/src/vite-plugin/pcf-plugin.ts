@@ -330,15 +330,29 @@ function extractEntities(raw: any): any[] {
       synth.push({
         LogicalName: logicalName,
         DisplayName: { UserLocalizedLabel: { Label: v.displayName ?? logicalName, LanguageCode: 1033 } },
+        PrimaryIdAttribute: v.primaryIdAttribute,
+        PrimaryNameAttribute: v.primaryNameAttribute,
+        _pcfWorkbenchProvenance: v.provenance,
         Attributes: Object.entries(v.columns).map(([col, c]) => {
           const cc = c as any;
-          return {
+          const attr: any = {
             LogicalName: col,
             AttributeType: cc.type ?? 'String',
             DisplayName: { UserLocalizedLabel: { Label: cc.displayName ?? col, LanguageCode: 1033 } },
             RequiredLevel: { Value: 'None' },
             AttributeOf: null,
           };
+          if (Array.isArray(cc.options)) {
+            attr.OptionSet = {
+              Options: cc.options.map((o: any) => ({
+                Value: o.value,
+                Label: { UserLocalizedLabel: { Label: o.text, LanguageCode: 1033 } },
+              })),
+            };
+          }
+          if (Array.isArray(cc.targets)) attr.Targets = cc.targets;
+          if (cc.defaultValue !== undefined) attr.DefaultValue = cc.defaultValue;
+          return attr;
         }),
       });
     }
@@ -1214,6 +1228,64 @@ export const launchedAsGallery = ${state.launchedAsGallery};`;
         // Supports: metadata.json (simple or Dataverse API format)
         //           EntityDefinitions_*.json (raw Dataverse API exports)
         if (urlPath === '/metadata.json') {
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const chunks: Buffer[] = [];
+            req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            req.on('end', () => {
+              try {
+                const incoming = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+                const incomingEntities = extractEntities(incoming);
+                if (incomingEntities.length === 0 || incomingEntities.some((entity) => !entity?.LogicalName)) {
+                  res.statusCode = 400;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ ok: false, error: 'body must contain at least one Dataverse EntityDefinition with LogicalName' }));
+                  return;
+                }
+
+                const candidates = [
+                  path.join(state.controlDir, 'metadata.json'),
+                  path.join(state.projectRoot, 'metadata.json'),
+                ];
+                const existingPath = candidates.find(filePath => fs.existsSync(filePath));
+                const target = existingPath ?? candidates[0];
+                const byLogicalName = new Map<string, any>();
+
+                if (existingPath) {
+                  const existing = JSON.parse(fs.readFileSync(existingPath, 'utf-8'));
+                  for (const entity of extractEntities(existing)) {
+                    if (entity?.LogicalName) byLogicalName.set(entity.LogicalName, entity);
+                  }
+                }
+                for (const entity of incomingEntities) {
+                  byLogicalName.set(entity.LogicalName, entity);
+                }
+
+                const metadata = {
+                  schemaVersion: 1,
+                  generatedAt: incoming.generatedAt ?? new Date().toISOString(),
+                  source: incoming.source ?? { kind: 'metadata-merge' },
+                  value: Array.from(byLogicalName.values()).sort((a, b) =>
+                    String(a.LogicalName).localeCompare(String(b.LogicalName))),
+                };
+                fs.writeFileSync(target, JSON.stringify(metadata, null, 2) + '\n', 'utf-8');
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  ok: true,
+                  path: target,
+                  mergedEntities: metadata.value.length,
+                  updatedEntities: incomingEntities.length,
+                  metadata,
+                }));
+              } catch (err: any) {
+                res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ ok: false, error: String(err?.message ?? err) }));
+              }
+            });
+            return;
+          }
+
           // Collect all metadata sources
           const metaFiles: string[] = [];
           const searchDirs = [state.controlDir, state.projectRoot];

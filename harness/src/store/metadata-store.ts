@@ -23,6 +23,14 @@ export interface ColumnMetadata {
   defaultValue?: any;
 }
 
+export type MetadataProvenanceKind = 'snapshot' | 'live' | 'inferred' | 'manual';
+
+export interface MetadataProvenance {
+  kind: MetadataProvenanceKind;
+  orgUrl?: string;
+  capturedAt?: string;
+}
+
 /**
  * 1:N / N:1 relationship between a parent (ReferencedEntity) and a child
  * (ReferencingEntity). On the parent's `oneToManyRelationships`, the parent
@@ -68,6 +76,9 @@ export interface ManyToManyMetadata {
 export interface EntityMetadata {
   displayName: string;
   columns: Record<string, ColumnMetadata>;
+  /** Where this schema came from. Snapshot provenance is persisted in
+   * metadata.json; inferred/manual metadata remains explicit in the UI. */
+  provenance?: MetadataProvenance;
   /** Primary key column name (e.g. `formid` for `systemform`). Populated
    *  in live mode from EntityDefinitions.PrimaryIdAttribute; may be absent
    *  for hand-rolled mock metadata, in which case callers fall back to the
@@ -122,7 +133,13 @@ export function getAllMetadata(): Record<string, EntityMetadata> {
 /** Replace the metadata for a single entity. Used by the DataPanel JSON
  *  editor when the user manually edits an entity's metadata. */
 export function setEntityMetadata(entityType: string, meta: EntityMetadata): void {
-  metadataStore = { ...metadataStore, [entityType]: meta };
+  metadataStore = {
+    ...metadataStore,
+    [entityType]: {
+      ...meta,
+      provenance: meta.provenance ?? { kind: 'manual' },
+    },
+  };
   notifyMetadata();
 }
 
@@ -138,7 +155,15 @@ export function deleteEntityMetadata(entityType: string): void {
 /** Replace the entire metadata store atomically. Used when applying a
  *  scenario that carries a serialized metadata snapshot. */
 export function replaceAllMetadata(data: Record<string, EntityMetadata>): void {
-  metadataStore = { ...data };
+  metadataStore = Object.fromEntries(
+    Object.entries(data).map(([entityType, meta]) => [
+      entityType,
+      {
+        ...meta,
+        provenance: meta.provenance ?? { kind: 'inferred' },
+      },
+    ]),
+  );
   notifyMetadata();
 }
 
@@ -156,32 +181,44 @@ export function loadMetadata(data: any): void {
 
   let mutated = false;
   const next = { ...metadataStore };
+  const envelopeProvenance = provenanceFromEnvelope(data);
 
   // Detect Dataverse API format: has "value" array with Attributes
   if (Array.isArray(data.value) && data.value.length > 0 && data.value[0].Attributes) {
-    parseDataverseFormat(data);
-    return;
+    for (const entity of data.value) {
+      const parsed = parseDataverseEntity(entity, envelopeProvenance);
+      if (parsed) {
+        next[parsed.logicalName] = parsed.metadata;
+        mutated = true;
+      }
+    }
   }
 
   // Check if it's an array of Dataverse responses (multiple files merged)
-  if (Array.isArray(data)) {
+  else if (Array.isArray(data)) {
     for (const item of data) {
-      if (item.value) {
-        parseDataverseFormat(item);
-      }
+      loadMetadata(item);
     }
     return;
   }
 
   // Simple format — use directly, but validate structure
-  for (const [key, val] of Object.entries(data)) {
-    const entity = val as any;
-    if (entity.displayName && entity.columns) {
-      next[key] = entity;
-      mutated = true;
-    } else if (entity.Attributes) {
-      // Single entity in Dataverse format without the "value" wrapper
-      parseDataverseEntity(entity);
+  else {
+    for (const [key, val] of Object.entries(data)) {
+      const entity = val as any;
+      if (entity.displayName && entity.columns) {
+        next[key] = {
+          ...entity,
+          provenance: entity.provenance ?? { kind: 'inferred' },
+        };
+        mutated = true;
+      } else if (entity.Attributes) {
+        const parsed = parseDataverseEntity(entity, envelopeProvenance);
+        if (parsed) {
+          next[parsed.logicalName] = parsed.metadata;
+          mutated = true;
+        }
+      }
     }
   }
 
@@ -191,16 +228,26 @@ export function loadMetadata(data: any): void {
   }
 }
 
-function parseDataverseFormat(data: any): void {
-  for (const entity of data.value) {
-    parseDataverseEntity(entity);
+function provenanceFromEnvelope(data: any): MetadataProvenance | undefined {
+  if (data?.source?.kind === 'dataverse-snapshot') {
+    return {
+      kind: 'snapshot',
+      orgUrl: data.source.orgUrl,
+      capturedAt: data.generatedAt,
+    };
   }
-  notifyMetadata();
+  if (data?.source?.kind === 'live') {
+    return { kind: 'live', orgUrl: data.source.orgUrl };
+  }
+  return undefined;
 }
 
-function parseDataverseEntity(entity: any): void {
+function parseDataverseEntity(
+  entity: any,
+  fallbackProvenance?: MetadataProvenance,
+): { logicalName: string; metadata: EntityMetadata } | null {
   const logicalName = entity.LogicalName;
-  if (!logicalName) return;
+  if (!logicalName) return null;
 
   const displayLabel = entity.DisplayName?.UserLocalizedLabel;
   const displayName = displayLabel?.Label ?? logicalName;
@@ -244,11 +291,15 @@ function parseDataverseEntity(entity: any): void {
     columns[attrLogical] = col;
   }
 
-  metadataStore[logicalName] = {
-    displayName,
-    columns,
-    primaryIdAttribute: entity.PrimaryIdAttribute,
-    primaryNameAttribute: entity.PrimaryNameAttribute,
+  return {
+    logicalName,
+    metadata: {
+      displayName,
+      columns,
+      provenance: entity._pcfWorkbenchProvenance ?? fallbackProvenance ?? { kind: 'inferred' },
+      primaryIdAttribute: entity.PrimaryIdAttribute,
+      primaryNameAttribute: entity.PrimaryNameAttribute,
+    },
   };
 }
 
