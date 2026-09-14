@@ -830,7 +830,10 @@ function resolveFieldBinding(
   const formatted = record[`_${columnName}_value@OData.Community.Display.V1.FormattedValue`]
     ?? record[`${columnName}@OData.Community.Display.V1.FormattedValue`];
   if (lookupVal && formatted) {
-    return [{ id: lookupVal, name: formatted, entityType: columnName }];
+    const entityType =
+      record[`_${columnName}_value@Microsoft.Dynamics.CRM.lookuplogicalname`]
+      ?? columnName;
+    return [{ id: lookupVal, name: formatted, entityType }];
   }
   return record[columnName] ?? null;
 }

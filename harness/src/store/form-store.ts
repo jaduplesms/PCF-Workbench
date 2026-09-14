@@ -11,7 +11,7 @@
  */
 
 import type { ManifestConfig } from '../types/manifest';
-import { getEntityData } from './data-store';
+import { getEntityData, updateEntityRecord } from './data-store';
 import { getEntityMetadata, getAllEntityTypes, getColumnDisplayName } from './metadata-store';
 
 export type RequiredLevel = 'none' | 'recommended' | 'required';
@@ -41,6 +41,12 @@ export interface AttributeState {
    *  `@OData.Community.Display.V1.FormattedValue` annotation) — e.g. the option
    *  label or the lookup's display name, so the UI needn't resolve a GUID. */
   formattedValue?: string;
+}
+
+export interface FormLookupValue {
+  id: string;
+  name: string;
+  entityType: string;
 }
 
 export interface ControlNotification {
@@ -291,15 +297,23 @@ export function seedFormState(
       // lookup target entity and the friendly display value the platform would
       // otherwise resolve for us — no metadata.json required.
       const formattedValue = active[`${key}${FORMATTED_VALUE_SUFFIX}`];
-      const lookupTarget = active[`${key}${LOOKUP_LOGICALNAME_SUFFIX}`];
+      const lookupTarget = active[`${key}${LOOKUP_LOGICALNAME_SUFFIX}`]
+        ?? metaCol?.targets?.[0];
       let attributeType = metaType ? mapMetadataAttrType(metaType) : inferAttrType(raw);
       // The `_x_value` convention is definitive: it's a lookup even when no
       // metadata is present and the raw value is just a GUID string.
       if (isLookupValue) attributeType = 'lookup';
+      const value = isLookupValue && raw != null
+        ? [{
+            id: String(raw),
+            name: formattedValue != null ? String(formattedValue) : '',
+            entityType: typeof lookupTarget === 'string' ? lookupTarget : '',
+          } satisfies FormLookupValue]
+        : raw;
       addAttributeInternal({
         name: attrName,
-        value: raw,
-        initialValue: raw,
+        value,
+        initialValue: value,
         requiredLevel: 'none',
         attributeType,
         isDirty: false,
@@ -331,6 +345,7 @@ export function seedFormState(
         submitMode: 'dirty',
         options: col.options,
         displayName: resolveDisplayName(colName, col.displayName),
+        lookupTarget: col.targets?.[0],
       });
     }
   }
@@ -515,12 +530,58 @@ export function listControls(): ControlState[] { return Array.from(state.control
 export function listTabs(): TabState[] { return Array.from(state.tabs.values()); }
 export function listSections(): SectionState[] { return Array.from(state.sections.values()); }
 
+function syncAttributeToPageRecord(name: string, attr: AttributeState): void {
+  if (!lastSeed?.pageEntityTypeName || !lastSeed.pageEntityId) return;
+
+  if (attr.attributeType === 'lookup') {
+    const lookup = Array.isArray(attr.value)
+      ? attr.value[0] as FormLookupValue | undefined
+      : undefined;
+    updateEntityRecord(lastSeed.pageEntityTypeName, lastSeed.pageEntityId, {
+      [`_${name}_value`]: lookup?.id ?? null,
+      [`_${name}_value@OData.Community.Display.V1.FormattedValue`]: lookup?.name ?? null,
+      [`_${name}_value@Microsoft.Dynamics.CRM.lookuplogicalname`]:
+        lookup?.entityType ?? attr.lookupTarget ?? null,
+    });
+    return;
+  }
+
+  updateEntityRecord(lastSeed.pageEntityTypeName, lastSeed.pageEntityId, {
+    [name]: attr.value,
+  });
+}
+
 export function setAttributeValue(name: string, value: any, fromHandler = false): boolean {
   const attr = state.attributes.get(name);
   if (!attr) return false;
   if (Object.is(attr.value, value)) return false;
   attr.value = value;
   attr.isDirty = !Object.is(attr.value, attr.initialValue);
+  syncAttributeToPageRecord(name, attr);
+  notify();
+  if (!fromHandler) fireOnChange(name);
+  return true;
+}
+
+export function setLookupAttributeValue(
+  name: string,
+  value: FormLookupValue | null,
+  fromHandler = false,
+): boolean {
+  const attr = state.attributes.get(name);
+  if (!attr || attr.attributeType !== 'lookup') return false;
+  const nextValue = value ? [value] : null;
+  const current = Array.isArray(attr.value) ? attr.value[0] as FormLookupValue | undefined : undefined;
+  if (
+    current?.id === value?.id
+    && current?.name === value?.name
+    && current?.entityType === value?.entityType
+  ) return false;
+  attr.value = nextValue;
+  attr.formattedValue = value?.name;
+  if (value?.entityType) attr.lookupTarget = value.entityType;
+  attr.isDirty = true;
+  syncAttributeToPageRecord(name, attr);
   notify();
   if (!fromHandler) fireOnChange(name);
   return true;

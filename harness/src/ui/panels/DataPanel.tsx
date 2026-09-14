@@ -501,7 +501,8 @@ function PageContextBlock({ mockTableNames }: { mockTableNames: string[] }) {
               const MAX_OPTIONS = 50;
               const selected = pageEntityId ? records.find(r => r.id === pageEntityId) : undefined;
               const q = recordSearch.trim().toLowerCase();
-              const filtered = q
+              const selectedText = (selected?.name || selected?.id || '').toLowerCase();
+              const filtered = q && q !== selectedText
                 ? records.filter(r =>
                     (r.name && r.name.toLowerCase().includes(q)) ||
                     r.id.toLowerCase().includes(q),
@@ -528,7 +529,7 @@ function PageContextBlock({ mockTableNames }: { mockTableNames: string[] }) {
                   }}
                   data-test-id="page-context-entity-id"
                   freeform={false}
-                  clearable
+                  clearable={false}
                 >
                   {shown.map(r => (
                     <Option key={r.id} value={r.id} text={r.name || r.id}>

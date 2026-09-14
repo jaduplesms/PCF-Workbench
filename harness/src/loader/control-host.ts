@@ -244,6 +244,16 @@ export class ControlHost {
     // scenario's records. Bug: scenario-switch-empty-render.
     if (s.dataVersion !== prev.dataVersion) {
       result.push('records');
+      for (const prop of this.manifest.properties) {
+        const rawValue = s.propertyValues[prop.name];
+        if (
+          typeof rawValue === 'string'
+          && rawValue.startsWith('$')
+          && !result.includes(prop.name)
+        ) {
+          result.push(prop.name);
+        }
+      }
       for (const ds of this.manifest.dataSets) {
         if (!result.includes(ds.name)) result.push(ds.name);
       }

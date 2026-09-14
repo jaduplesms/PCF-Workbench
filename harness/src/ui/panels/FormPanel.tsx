@@ -10,6 +10,7 @@ import {
   listControls,
   listTabs,
   setAttributeValue,
+  setLookupAttributeValue,
   setControlVisible,
   setControlDisabled,
   setControlNotification,
@@ -24,6 +25,8 @@ import {
 import { getEntityStoreKeys, getEntityData } from '../../store/data-store';
 import { getEntityMetadata } from '../../store/metadata-store';
 import { SearchPicker, type SearchPickerItem } from '../common/SearchPicker';
+import { useHarnessStore } from '../../store/harness-store';
+import { DvProxyError, liveSearchRecords, type LiveRecordResult } from '../../api/dv-client';
 
 const useStyles = makeStyles({
   root: {
@@ -388,39 +391,107 @@ function buildLookupItems(): SearchPickerItem<{ entityType: string; id: string; 
 }
 
 function LookupEditor({ attr }: { attr: AttributeState }): JSX.Element {
+  const dataSource = useHarnessStore(s => s.dataSource);
+  const liveProfile = useHarnessStore(s => s.liveProfile);
+  const liveConnectionState = useHarnessStore(s => s.liveConnectionState);
+  const [liveRecords, setLiveRecords] = useState<LiveRecordResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const all = buildLookupItems();
   // Scope to the lookup's target entity when we know it (from the record's
   // lookuplogicalname annotation or metadata); otherwise search every table.
   let items = attr.lookupTarget ? all.filter(i => i.raw.entityType === attr.lookupTarget) : all;
-  const currentId = attr.value == null ? '' : String(attr.value);
+  if (attr.lookupTarget) {
+    items = items.map(item => ({ ...item, secondary: undefined, group: undefined }));
+  }
+  const currentLookup = Array.isArray(attr.value) ? attr.value[0] : null;
+  const currentId = currentLookup?.id ?? (attr.value == null ? '' : String(attr.value));
+  const currentName = currentLookup?.name || attr.formattedValue;
+
+  useEffect(() => {
+    if (
+      dataSource !== 'live'
+      || liveConnectionState !== 'connected'
+      || !liveProfile?.orgUrl
+      || !attr.lookupTarget
+    ) {
+      setLiveRecords([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    let active = true;
+    const handle = window.setTimeout(() => {
+      void liveSearchRecords(liveProfile.orgUrl, attr.lookupTarget!, search, 25)
+        .then(records => {
+          if (active) setLiveRecords(records);
+        })
+        .catch((e: unknown) => {
+          if (!active) return;
+          setLiveRecords([]);
+          setError(e instanceof DvProxyError ? e.body.message : (e as Error).message);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [
+    dataSource,
+    liveConnectionState,
+    liveProfile?.orgUrl,
+    attr.lookupTarget,
+    search,
+  ]);
+
+  if (dataSource === 'live' && attr.lookupTarget) {
+    items = liveRecords.map(record => ({
+      value: record.id,
+      text: record.name,
+      raw: {
+        entityType: attr.lookupTarget!,
+        id: record.id,
+        name: record.name,
+      },
+    }));
+  }
   // The record's FormattedValue is the authoritative display name for the
   // current value (e.g. "WO-00047"). Ensure the picker shows it even when the
   // target record has no resolvable primary-name column, or no mock row at all.
-  if (currentId && attr.formattedValue) {
+  if (currentId && currentName) {
     const idx = items.findIndex(i => i.value === currentId);
     if (idx >= 0) {
-      items = items.map((it, i) => (i === idx ? { ...it, text: attr.formattedValue! } : it));
+      items = items.map((it, i) => (i === idx ? { ...it, text: currentName } : it));
     } else {
       items = [{
         value: currentId,
-        text: attr.formattedValue,
-        secondary: attr.lookupTarget ? `${attr.lookupTarget} · ${currentId}` : currentId,
-        group: attr.lookupTarget,
-        raw: { entityType: attr.lookupTarget ?? '', id: currentId, name: attr.formattedValue },
+        text: currentName,
+        raw: { entityType: attr.lookupTarget ?? '', id: currentId, name: currentName },
       }, ...items];
     }
   }
   const current = items.find(i => i.value === currentId);
-  const placeholder = current ? current.text : (attr.formattedValue ?? (currentId || 'Pick a record…'));
+  const placeholder = current ? current.text : (currentName ?? (currentId || 'Pick a record…'));
   return (
     <SearchPicker
       items={items}
       activeValue={currentId || null}
       placeholder={placeholder}
+      loading={loading}
+      error={error}
       unfetchedMessage={attr.lookupTarget
-        ? `No mock ${attr.lookupTarget} records — add them in the Data tab.`
+        ? dataSource === 'live'
+          ? `No ${attr.lookupTarget} records found.`
+          : `No mock ${attr.lookupTarget} records — add them in the Data tab.`
         : 'No mock records — add tables in the Data tab.'}
-      onSelect={(item) => setAttributeValue(attr.name, item.value)}
+      onSearchChange={dataSource === 'live' ? setSearch : undefined}
+      onSelect={(item) => setLookupAttributeValue(attr.name, item.raw)}
       size="small"
       testIdPrefix={`fp-attr-${attr.name}`}
     />
@@ -529,17 +600,27 @@ export function FormPanel(): JSX.Element {
   const styles = useStyles();
   const snap = useFormSnapshot();
   const [editing, setEditing] = useState<Record<string, string>>({});
+  const pageEntityTypeName = useHarnessStore(s => s.pageEntityTypeName);
+  const pageMetadata = getEntityMetadata(pageEntityTypeName);
+  const primaryIdentityAttributes = new Set([
+    pageMetadata?.primaryIdAttribute ?? (pageEntityTypeName ? `${pageEntityTypeName}id` : ''),
+    pageMetadata?.primaryNameAttribute ?? '',
+  ].filter(Boolean));
+  const visibleAttributes = snap.attributes.filter(a => !primaryIdentityAttributes.has(a.name));
+  const visibleControls = snap.controls.filter(
+    c => !c.attributeName || !primaryIdentityAttributes.has(c.attributeName),
+  );
 
   // Re-seed local edit buffer when the underlying store changes
   useEffect(() => {
     setEditing(prev => {
       const next: Record<string, string> = {};
-      for (const a of snap.attributes) {
+      for (const a of visibleAttributes) {
         next[a.name] = prev[a.name] ?? (a.value == null ? '' : String(a.value));
       }
       return next;
     });
-  }, [snap.version]);
+  }, [snap.version, pageEntityTypeName]);
 
   return (
     <div className={styles.root} data-test-id="form-panel">
@@ -576,7 +657,7 @@ export function FormPanel(): JSX.Element {
 
       <CollapsibleSection
         id="attributes"
-        title={`Attributes (${snap.attributes.length})`}
+        title={`Attributes (${visibleAttributes.length})`}
         titleTooltip="Attributes are the data fields on the form's record — the values your control reads and writes via formContext.getAttribute(name)."
         defaultCollapsed={true}
         testId="fp-section-attributes"
@@ -586,14 +667,15 @@ export function FormPanel(): JSX.Element {
           <span className={styles.introCode}>formContext.getAttribute(name)</span>.
           Change a value with the friendly editor and <strong>onChange fires
           automatically</strong> — just like a user editing that field on a real form.
+          The primary record ID and name are managed under <strong>Data → Page context</strong>.
         </div>
-        {snap.attributes.length === 0 && (
+        {visibleAttributes.length === 0 && (
           <div className={styles.emptyMsg}>
             No attributes seeded. Add records to <code>data.json</code> or bound
             properties to the manifest.
           </div>
         )}
-        {snap.attributes.map(a => {
+        {visibleAttributes.map(a => {
           const isNum = NUMERIC_TYPES.has(a.attributeType);
           const commitText = () => {
             const raw = editing[a.name] ?? '';
@@ -649,7 +731,7 @@ export function FormPanel(): JSX.Element {
 
       <CollapsibleSection
         id="controls"
-        title={`Controls (${snap.controls.length})`}
+        title={`Controls (${visibleControls.length})`}
         titleTooltip="Controls are the UI widgets bound to fields. Toggle visibility / disabled state or raise a notification to test how your control reacts."
         defaultCollapsed={true}
         testId="fp-section-controls"
@@ -659,7 +741,7 @@ export function FormPanel(): JSX.Element {
           <strong>disabled</strong>, or raise a field-level notification, to test
           how your control responds.
         </div>
-        {snap.controls.map(c => (
+        {visibleControls.map(c => (
           <div key={c.name} className={styles.controlRow} data-test-id={`fp-ctrl-${c.name}`}>
             <span
               className={mergeClasses(styles.attrName, styles.controlName)}
